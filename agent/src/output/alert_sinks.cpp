@@ -56,6 +56,24 @@ void ConsoleSink::Emit(const Finding& f) {
     std::wcout << L"  Summary: " << f.summary << L"\n\n";
 }
 
+void ConsoleSink::EmitEnriched(const EnrichedFinding& f) {
+    Emit(static_cast<const Finding&>(f));
+    if (!f.scans.empty()) {
+        std::wcout << L"  On-demand scans:\n";
+        for (const auto& s : f.scans) {
+            std::wcout << L"    - " << s.scanner
+                       << L": executed=" << (s.executed ? L"true" : L"false")
+                       << L", suspicious=" << (s.suspicious ? L"true" : L"false")
+                       << L", exit_code=" << s.exit_code << L"\n"
+                       << L"      out_dir=" << (s.output_dir.empty() ? L"(n/a)" : s.output_dir) << L"\n"
+                       << L"      report=" << (s.raw_report_path.empty() ? L"(n/a)" : s.raw_report_path) << L"\n"
+                       << L"      summary=" << (s.summary.empty() ? L"(n/a)" : s.summary) << L"\n";
+        }
+        std::wcout << L"\n";
+    }
+}
+
+
 std::string JsonlFileSink::NarrowUtf8(const std::wstring& ws) {
     return WideToUtf8(ws);
 }
@@ -128,6 +146,50 @@ void JsonlFileSink::Emit(const Finding& f) {
         << "\"fields\":" << FieldsToJson(f.evidence.fields) << ","
         << "\"summary\":\"" << summary << "\""
         << "}\n";
+}
+
+void JsonlFileSink::EmitEnriched(const EnrichedFinding& f) {
+    std::ofstream ofs(NarrowUtf8(path_), std::ios::app);
+    if (!ofs) return;
+
+    auto sev = JsonEscape(NarrowUtf8(f.severity));
+    auto title = JsonEscape(NarrowUtf8(f.title));
+    auto rule = JsonEscape(NarrowUtf8(f.rule_id));
+    auto time = JsonEscape(NarrowUtf8(f.evidence.timestamp_utc));
+    auto img = JsonEscape(NarrowUtf8(f.evidence.proc.image));
+    auto cmd = JsonEscape(NarrowUtf8(f.evidence.proc.command_line));
+    auto summary = JsonEscape(NarrowUtf8(f.summary));
+
+    ofs << "{"
+        << "\"severity\":\"" << sev << "\","
+        << "\"title\":\"" << title << "\","
+        << "\"rule_id\":\"" << rule << "\","
+        << "\"timestamp_utc\":\"" << time << "\","
+        << "\"pid\":" << f.evidence.proc.pid << ","
+        << "\"image\":\"" << img << "\","
+        << "\"command_line\":\"" << cmd << "\","
+        << "\"summary\":\"" << summary << "\","
+        << "\"scans\":[";
+
+    for (size_t i = 0; i < f.scans.size(); ++i) {
+        const auto& s = f.scans[i];
+        auto scanner = JsonEscape(NarrowUtf8(s.scanner));
+        auto outdir = JsonEscape(NarrowUtf8(s.output_dir));
+        auto report = JsonEscape(NarrowUtf8(s.raw_report_path));
+        auto ssum = JsonEscape(NarrowUtf8(s.summary));
+
+        ofs << "{"
+            << "\"scanner\":\"" << scanner << "\","
+            << "\"executed\":" << (s.executed ? "true" : "false") << ","
+            << "\"suspicious\":" << (s.suspicious ? "true" : "false") << ","
+            << "\"exit_code\":" << s.exit_code << ","
+            << "\"output_dir\":\"" << outdir << "\","
+            << "\"report_path\":\"" << report << "\","
+            << "\"summary\":\"" << ssum << "\""
+            << "}";
+        if (i + 1 < f.scans.size()) ofs << ",";
+    }
+    ofs << "]}\n";
 }
 
 } // namespace miniedr

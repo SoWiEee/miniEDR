@@ -72,4 +72,18 @@ struct Finding {
     CanonicalEvent evidence;
 };
 
+struct ScannerResult {
+    std::wstring scanner;        // e.g. "pe-sieve", "hollows_hunter"
+    bool executed = false;        // tool launched successfully
+    bool suspicious = false;      // tool reported anomalies
+    int exit_code = -1;           // process exit code
+    std::wstring output_dir;      // where reports/dumps were written
+    std::wstring summary;         // short human-readable summary
+    std::wstring raw_report_path; // primary JSON report path if found
+};
+
+struct EnrichedFinding : public Finding {
+    std::vector<ScannerResult> scans;
+};
+
 } // namespace miniedr

@@ -8,6 +8,10 @@ add_executable(miniedr
   src/output/alert_sinks.cpp
   src/utils/win_path.cpp
   src/utils/encoding.cpp
+  src/scanners/process_runner.cpp
+  src/scanners/scanner_manager.cpp
+  src/scanners/pe_sieve_adapter.cpp
+  src/scanners/hollows_hunter_adapter.cpp
 )
 
 target_include_directories(miniedr PRIVATE src)

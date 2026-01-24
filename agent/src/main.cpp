@@ -5,6 +5,7 @@
 #include "detection/rule_engine.h"
 #include "detection/correlator.h"
 #include "output/alert_sinks.h"
+#include "scanners/scanner_manager.h"
 
 #include <atomic>
 #include <csignal>
@@ -54,11 +55,24 @@ int wmain(int argc, wchar_t** argv) {
     sinks.emplace_back(std::make_unique<ConsoleSink>());
     sinks.emplace_back(std::make_unique<JsonlFileSink>(L"alerts.jsonl"));
 
+    // Phase 3: on-demand deep scans for high-severity findings
+    auto scan_cfg = LoadScannerConfig(L"agent\\config\\scanners.json");
+    ScannerManager scanner_mgr(scan_cfg);
+
     auto EmitFindings = [&](const std::vector<Finding>& findings) {
-        for (const auto& f : findings) {
-            for (auto& s : sinks) s->Emit(f);
-        }
-    };
+    for (const auto& f : findings) {
+        EnrichedFinding ef;
+        ef.rule_id = f.rule_id;
+        ef.title = f.title;
+        ef.severity = f.severity;
+        ef.summary = f.summary;
+        ef.evidence = f.evidence;
+
+        ef.scans = scanner_mgr.RunOnDemand(f);
+
+        for (auto& s : sinks) s->EmitEnriched(ef);
+    }
+};
 
     auto HandleEvent = [&](const CanonicalEvent& ev) {
         EmitFindings(engine.Evaluate(ev));

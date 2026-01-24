@@ -140,3 +140,36 @@ Outputs:
 ## Safety and ethics
 
 This project is for defensive research and education. Test only in environments you own or are authorized to assess.
+
+
+## Phase 3: On-demand deep scans (pe-sieve / hollows_hunter)
+
+Phase 3 adds optional, on-demand deep scanning for **already-alerted** PIDs. This is the core performance idea:
+MiniEDR only pays the cost of memory scanning when detection rules/correlation have already raised suspicion.
+
+Trigger logic (configurable):
+- Severity is **High** or **Critical**, or
+- `rule_id` contains a substring listed in `agent/config/scanners.json` → `scan_rule_ids`
+
+Adapters included:
+- **PE-sieve** (single PID scan via `/pid`)
+- **HollowsHunter** (PID-targeted scan via `/pid` plus `/dir` + `/uniqd`)
+
+Outputs:
+- Each scan creates a unique folder under `scan_outputs/` by default.
+- MiniEDR reads JSON reports (when present) and marks a scan `suspicious=true` using a lightweight heuristic:
+  `modified.total > 0` (from the report).
+
+### Setup
+
+1) Download the latest releases of PE-sieve and/or HollowsHunter and put the executables into `tools/bin/`:
+- `tools\bin\pe-sieve64.exe`
+- `tools\bin\hollows_hunter64.exe`
+
+2) Verify configuration:
+- `agent\config\scanners.json`
+
+3) Run MiniEDR (Administrator recommended). When a scan triggers, console output shows an "On-demand scans" block
+and `alerts.jsonl` includes a `scans` array.
+
+See also: `docs/scanners.md`.
