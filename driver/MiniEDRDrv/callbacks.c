@@ -6,8 +6,8 @@
 
 extern VOID MiniEdrRingPush(_In_ WDFDEVICE Device, _In_reads_bytes_(Size) const void* Data, _In_ ULONG Size);
 
-static WDFDEVICE g_device = nullptr;
-static PVOID g_obHandle = nullptr;
+static WDFDEVICE g_device = NULL;
+static PVOID g_obHandle = NULL;
 
 static OB_PREOP_CALLBACK_STATUS MiniEdrPreOp(_In_ PVOID RegistrationContext, _Inout_ POB_PRE_OPERATION_INFORMATION OperationInformation)
 {
@@ -42,7 +42,7 @@ static OB_PREOP_CALLBACK_STATUS MiniEdrPreOp(_In_ PVOID RegistrationContext, _In
     MINIEDR_EVT_HANDLEACCESS e = {0};
     e.H.Type = MiniEdrEvent_HandleAccess;
     e.H.Size = sizeof(e);
-    e.H.TimestampQpc = (uint64_t)KeQueryPerformanceCounter(nullptr).QuadPart;
+    e.H.TimestampQpc = (uint64_t)KeQueryPerformanceCounter(NULL).QuadPart;
     e.SourcePid = srcPid;
     e.TargetPid = tgtPid;
     e.DesiredAccess = (uint32_t)desired;
@@ -81,7 +81,7 @@ VOID MiniEdrPushProcessEvent(_In_ WDFDEVICE Device, _In_ BOOLEAN Create, _In_ HA
     MINIEDR_EVT_PROCESS e = {0};
     e.H.Type = Create ? MiniEdrEvent_ProcessCreate : MiniEdrEvent_ProcessExit;
     e.H.Size = sizeof(e);
-    e.H.TimestampQpc = (uint64_t)KeQueryPerformanceCounter(nullptr).QuadPart;
+    e.H.TimestampQpc = (uint64_t)KeQueryPerformanceCounter(NULL).QuadPart;
     e.Pid = (uint32_t)(ULONG_PTR)ProcessId;
     e.ParentPid = (uint32_t)(ULONG_PTR)ParentId;
 
@@ -99,7 +99,7 @@ VOID MiniEdrPushImageLoadEvent(_In_ WDFDEVICE Device, _In_ HANDLE ProcessId, _In
     MINIEDR_EVT_IMAGELOAD e = {0};
     e.H.Type = MiniEdrEvent_ImageLoad;
     e.H.Size = sizeof(e);
-    e.H.TimestampQpc = (uint64_t)KeQueryPerformanceCounter(nullptr).QuadPart;
+    e.H.TimestampQpc = (uint64_t)KeQueryPerformanceCounter(NULL).QuadPart;
     e.Pid = (uint32_t)(ULONG_PTR)ProcessId;
 
     if (FullImageName && FullImageName->Buffer) {
@@ -120,7 +120,7 @@ VOID MiniEdrPushHandleAccessEvent(_In_ WDFDEVICE Device, _In_ ULONG SourcePid, _
     MINIEDR_EVT_HANDLEACCESS e = {0};
     e.H.Type = MiniEdrEvent_HandleAccess;
     e.H.Size = sizeof(e);
-    e.H.TimestampQpc = (uint64_t)KeQueryPerformanceCounter(nullptr).QuadPart;
+    e.H.TimestampQpc = (uint64_t)KeQueryPerformanceCounter(NULL).QuadPart;
     e.SourcePid = SourcePid;
     e.TargetPid = TargetPid;
     e.DesiredAccess = (uint32_t)DesiredAccess;
@@ -151,19 +151,19 @@ NTSTATUS MiniEdrRegisterCallbacks(_In_ WDFDEVICE Device)
     op.ObjectType = PsProcessType;
     op.Operations = OB_OPERATION_HANDLE_CREATE | OB_OPERATION_HANDLE_DUPLICATE;
     op.PreOperation = MiniEdrPreOp;
-    op.PostOperation = nullptr;
+    op.PostOperation = NULL;
 
     reg.Version = OB_FLT_REGISTRATION_VERSION;
     reg.OperationRegistrationCount = 1;
     reg.Altitude = altitude;
-    reg.RegistrationContext = nullptr;
+    reg.RegistrationContext = NULL;
     reg.OperationRegistration = &op;
 
     status = ObRegisterCallbacks(&reg, &g_obHandle);
     if (!NT_SUCCESS(status)) {
         PsRemoveLoadImageNotifyRoutine(MiniEdrImageLoadNotify);
         PsSetCreateProcessNotifyRoutineEx(MiniEdrProcessNotifyEx, TRUE);
-        g_obHandle = nullptr;
+        g_obHandle = NULL;
         return status;
     }
 
@@ -174,11 +174,11 @@ VOID MiniEdrUnregisterCallbacks()
 {
     if (g_obHandle) {
         ObUnRegisterCallbacks(g_obHandle);
-        g_obHandle = nullptr;
+        g_obHandle = NULL;
     }
 
     PsRemoveLoadImageNotifyRoutine(MiniEdrImageLoadNotify);
     PsSetCreateProcessNotifyRoutineEx(MiniEdrProcessNotifyEx, TRUE);
 
-    g_device = nullptr;
+    g_device = NULL;
 }

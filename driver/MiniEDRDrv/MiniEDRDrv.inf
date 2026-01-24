@@ -1,45 +1,69 @@
-; MiniEDRDrv.inf - minimal test INF for KMDF driver (manual install / test VM recommended)
+;
+; MiniEDRDrv.inf
+;
+
 [Version]
 Signature   = "$WINDOWS NT$"
 Class       = System
-ClassGuid   = {4d36e97d-e325-11ce-bfc1-08002be10318}
+ClassGuid   = {4d36e97d-e325-11ce-bfc1-08002be10318} ; TODO: specify appropriate ClassGuid
 Provider    = %ManufacturerName%
-DriverVer   = 01/24/2026,1.0.0.0
 CatalogFile = MiniEDRDrv.cat
+DriverVer   = 01/24/2026,1.0.0.0
+PnpLockdown = 1
 
 [DestinationDirs]
-DefaultDestDir = 12
+DefaultDestDir = 13
+
+[SourceDisksNames]
+1 = %DiskName%,,,""
+
+[SourceDisksFiles]
+MiniEDRDrv.sys = 1,,
+
+;*****************************************
+; Install Section
+;*****************************************
 
 [Manufacturer]
-%ManufacturerName% = Standard,NTamd64
+%ManufacturerName% = Standard,NT$ARCH$.10.0...16299 ; %13% support introduced in build 16299
 
-[Standard.NTamd64]
-%MiniEDRDrv.DeviceDesc% = MiniEDRDrv_Install, Root\MiniEDRDrv
+[Standard.NT$ARCH$.10.0...16299]
+%MiniEDRDrv.DeviceDesc% = MiniEDRDrv_Device, Root\MiniEDRDrv ; TODO: edit hw-id
 
-[MiniEDRDrv_Install]
-CopyFiles = MiniEDRDrv_CopyFiles
+[MiniEDRDrv_Device.NT]
+CopyFiles = File_Copy
 
-[MiniEDRDrv_CopyFiles]
+[File_Copy]
 MiniEDRDrv.sys
 
-[MiniEDRDrv_Install.Services]
-AddService = MiniEDRDrv, 0x00000002, MiniEDRDrv_Service, MiniEDRDrv_EventLog
+;-------------- Service installation
+[MiniEDRDrv_Device.NT.Services]
+AddService = MiniEDRDrv,%SPSVCINST_ASSOCSERVICE%, MiniEDRDrv_Service, MiniEDRDrv_EventLog
 
+; -------------- MiniEDRDrv driver install sections
 [MiniEDRDrv_Service]
 DisplayName    = %MiniEDRDrv.SvcDesc%
-ServiceType    = 1
-StartType      = 3
-ErrorControl   = 1
-ServiceBinary  = %12%\MiniEDRDrv.sys
+ServiceType    = 1               ; SERVICE_KERNEL_DRIVER
+StartType      = 3               ; SERVICE_DEMAND_START
+ErrorControl   = 1               ; SERVICE_ERROR_NORMAL
+ServiceBinary  = %13%\MiniEDRDrv.sys
 
 [MiniEDRDrv_EventLog]
 AddReg = MiniEDRDrv_EventLog_AddReg
 
 [MiniEDRDrv_EventLog_AddReg]
-HKR,,EventMessageFile,0x00020000,"%SystemRoot%\System32\IoLogMsg.dll"
+HKR,,EventMessageFile,0x00020000,"%%SystemRoot%%\System32\IoLogMsg.dll"
 HKR,,TypesSupported,0x00010001,7
 
+[MiniEDRDrv_Device.NT.Wdf]
+KmdfService = MiniEDRDrv, MiniEDRDrv_wdfsect
+
+[MiniEDRDrv_wdfsect]
+KmdfLibraryVersion = $KMDFVERSION$
+
 [Strings]
+SPSVCINST_ASSOCSERVICE = 0x00000002
 ManufacturerName = "MiniEDR"
-MiniEDRDrv.DeviceDesc = "MiniEDR Kernel Telemetry Driver (KMDF)"
+DiskName = "MiniEDR Installation Disk"
+MiniEDRDrv.DeviceDesc = "MiniEDR Device"
 MiniEDRDrv.SvcDesc    = "MiniEDRDrv"

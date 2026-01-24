@@ -47,7 +47,7 @@ static ULONG RingPopMany(_In_ WDFDEVICE Device, _Out_writes_bytes_(OutCap) uint8
 
     while (ctx->ReadIndex != ctx->WriteIndex) {
         auto* slot = &g_ring[ctx->ReadIndex];
-        ULONG sz = slot->H.Size;
+        ULONG sz = ((MINIEDR_EVT_IMAGELOAD*)slot)->H.Size;
         if (sz == 0 || sz > SLOT_SIZE) sz = SLOT_SIZE;
 
         if (written + sz > OutCap) break;
@@ -88,28 +88,29 @@ VOID MiniEdrEvtIoDeviceControl(_In_ WDFQUEUE Queue,
 {
     UNREFERENCED_PARAMETER(InputBufferLength);
 
-    WDFDEVICE device = WdfIoQueueGetDevice(Queue);
+    WDFDEVICE device = WDF_NO_HANDLE;
+    device = WdfIoQueueGetDevice(Queue);
     NTSTATUS status = STATUS_SUCCESS;
     size_t bytes = 0;
 
     if (IoControlCode == IOCTL_MINIEDR_GET_VERSION) {
-        MINIEDR_VERSION_INFO* out = nullptr;
-        status = WdfRequestRetrieveOutputBuffer(Request, sizeof(MINIEDR_VERSION_INFO), (PVOID*)&out, nullptr);
+        MINIEDR_VERSION_INFO* out = NULL;
+        status = WdfRequestRetrieveOutputBuffer(Request, sizeof(MINIEDR_VERSION_INFO), (PVOID*)&out, NULL);
         if (NT_SUCCESS(status)) {
             out->Version = MINIEDR_IOCTL_VERSION;
             out->Features = 0;
             bytes = sizeof(MINIEDR_VERSION_INFO);
         }
     } else if (IoControlCode == IOCTL_MINIEDR_GET_EVENTS) {
-        uint8_t* out = nullptr;
-        status = WdfRequestRetrieveOutputBuffer(Request, 1, (PVOID*)&out, nullptr);
+        uint8_t* out = NULL;
+        status = WdfRequestRetrieveOutputBuffer(Request, 1, (PVOID*)&out, NULL);
         if (NT_SUCCESS(status)) {
             ULONG cap = (ULONG)OutputBufferLength;
             bytes = RingPopMany(device, out, cap);
         }
     } else if (IoControlCode == IOCTL_MINIEDR_SET_POLICY) {
-        const MINIEDR_POLICY* in = nullptr;
-        status = WdfRequestRetrieveInputBuffer(Request, sizeof(MINIEDR_POLICY), (PVOID*)&in, nullptr);
+        const MINIEDR_POLICY* in = NULL;
+        status = WdfRequestRetrieveInputBuffer(Request, sizeof(MINIEDR_POLICY), (PVOID*)&in, NULL);
         if (NT_SUCCESS(status)) {
             auto ctx = DeviceGetContext(device);
             ctx->HandleAuditEnabled = (in->EnableHandleAudit != 0) ? TRUE : FALSE;
