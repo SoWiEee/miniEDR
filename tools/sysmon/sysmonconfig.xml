@@ -1,0 +1,15 @@
+<!--
+This is a minimal placeholder Sysmon configuration.
+
+Recommended approach for Phase 1:
+- Enable Event ID 1 (Process Create) at minimum.
+- Optionally enable EID 3 (Network), EID 7 (Image Load) later as you expand detection.
+
+For production-quality configs, you can base this on well-known community configs
+(e.g., SwiftOnSecurity). Always review and adapt for your environment.
+-->
+<Sysmon schemaversion="4.90">
+  <EventFiltering>
+    <ProcessCreate onmatch="include" />
+  </EventFiltering>
+</Sysmon>
