@@ -14,16 +14,6 @@ namespace miniedr {
 
 static std::wstring Safe(const std::wstring& s) { return s.empty() ? L"(n/a)" : s; }
 
-void ConsoleSink::Emit(const Finding& f) {
-    std::wcout << L"[ALERT] [" << f.severity << L"] " << f.title << L"\n"
-               << L"  Rule: " << f.rule_id << L"\n"
-               << L"  Time: " << Safe(f.evidence.timestamp_utc) << L"\n"
-               << L"  PID : " << f.evidence.proc.pid << L"\n"
-               << L"  Image: " << Safe(f.evidence.proc.image) << L"\n"
-               << L"  Cmd  : " << Safe(f.evidence.proc.command_line) << L"\n"
-               << L"  Summary: " << f.summary << L"\n\n";
-}
-
 static std::string WideToUtf8(const std::wstring& w) {
 #ifdef _WIN32
     if (w.empty()) return {};
@@ -38,6 +28,32 @@ static std::string WideToUtf8(const std::wstring& w) {
     for (auto c : w) out.push_back(static_cast<char>(c & 0xFF));
     return out;
 #endif
+}
+
+void ConsoleSink::Emit(const Finding& f) {
+    std::wcout << L"[ALERT] [" << f.severity << L"] " << f.title << L"\n"
+               << L"  Rule: " << f.rule_id << L"\n"
+               << L"  Source: " << Safe(f.evidence.source) << L" (eid/opcode=" << f.evidence.source_eid << L")\n"
+               << L"  Time: " << Safe(f.evidence.timestamp_utc) << L"\n"
+               << L"  Actor PID : " << f.evidence.proc.pid << L"\n"
+               << L"  Actor Image: " << Safe(f.evidence.proc.image) << L"\n"
+               << L"  Actor Cmd  : " << Safe(f.evidence.proc.command_line) << L"\n";
+
+    if (f.evidence.target.pid != 0 || !f.evidence.target.image.empty()) {
+        std::wcout << L"  Target PID : " << f.evidence.target.pid << L"\n"
+                   << L"  Target Image: " << Safe(f.evidence.target.image) << L"\n";
+    }
+
+    if (!f.evidence.fields.empty()) {
+        std::wcout << L"  Fields:\n";
+        int n = 0;
+        for (const auto& kv : f.evidence.fields) {
+            if (n++ >= 8) { std::wcout << L"    ...\n"; break; }
+            std::wcout << L"    " << kv.first << L": " << Safe(kv.second) << L"\n";
+        }
+    }
+
+    std::wcout << L"  Summary: " << f.summary << L"\n\n";
 }
 
 std::string JsonlFileSink::NarrowUtf8(const std::wstring& ws) {
@@ -68,6 +84,21 @@ std::string JsonlFileSink::JsonEscape(const std::string& s) {
 
 JsonlFileSink::JsonlFileSink(const std::wstring& path) : path_(path) {}
 
+static std::string FieldsToJson(const std::unordered_map<std::wstring, std::wstring>& fields) {
+    std::ostringstream oss;
+    oss << "{";
+    bool first = true;
+    for (const auto& kv : fields) {
+        if (!first) oss << ",";
+        first = false;
+        auto k = JsonlFileSink::JsonEscape(JsonlFileSink::NarrowUtf8(kv.first));
+        auto v = JsonlFileSink::JsonEscape(JsonlFileSink::NarrowUtf8(kv.second));
+        oss << "\"" << k << "\":\"" << v << "\"";
+    }
+    oss << "}";
+    return oss.str();
+}
+
 void JsonlFileSink::Emit(const Finding& f) {
     std::ofstream ofs(NarrowUtf8(path_), std::ios::app);
     if (!ofs) return;
@@ -76,8 +107,10 @@ void JsonlFileSink::Emit(const Finding& f) {
     auto title = JsonEscape(NarrowUtf8(f.title));
     auto rule = JsonEscape(NarrowUtf8(f.rule_id));
     auto time = JsonEscape(NarrowUtf8(f.evidence.timestamp_utc));
+    auto source = JsonEscape(NarrowUtf8(f.evidence.source));
     auto img = JsonEscape(NarrowUtf8(f.evidence.proc.image));
     auto cmd = JsonEscape(NarrowUtf8(f.evidence.proc.command_line));
+    auto timg = JsonEscape(NarrowUtf8(f.evidence.target.image));
     auto summary = JsonEscape(NarrowUtf8(f.summary));
 
     ofs << "{"
@@ -85,9 +118,14 @@ void JsonlFileSink::Emit(const Finding& f) {
         << "\"title\":\"" << title << "\","
         << "\"rule_id\":\"" << rule << "\","
         << "\"timestamp_utc\":\"" << time << "\","
-        << "\"pid\":" << f.evidence.proc.pid << ","
-        << "\"image\":\"" << img << "\","
-        << "\"command_line\":\"" << cmd << "\","
+        << "\"source\":\"" << source << "\","
+        << "\"source_eid\":" << f.evidence.source_eid << ","
+        << "\"actor_pid\":" << f.evidence.proc.pid << ","
+        << "\"actor_image\":\"" << img << "\","
+        << "\"actor_command_line\":\"" << cmd << "\","
+        << "\"target_pid\":" << f.evidence.target.pid << ","
+        << "\"target_image\":\"" << timg << "\","
+        << "\"fields\":" << FieldsToJson(f.evidence.fields) << ","
         << "\"summary\":\"" << summary << "\""
         << "}\n";
 }

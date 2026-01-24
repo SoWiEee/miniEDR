@@ -1,15 +1,19 @@
 add_executable(miniedr
   src/main.cpp
   src/collectors/sysmon_collector.cpp
+  src/collectors/etw_kernel_collector.cpp
   src/pipeline/normalizer.cpp
   src/detection/rule_engine.cpp
+  src/detection/correlator.cpp
   src/output/alert_sinks.cpp
+  src/utils/win_path.cpp
+  src/utils/encoding.cpp
 )
 
 target_include_directories(miniedr PRIVATE src)
 
 if (WIN32)
-  target_link_libraries(miniedr PRIVATE wevtapi)
+  target_link_libraries(miniedr PRIVATE wevtapi advapi32 tdh)
   target_compile_definitions(miniedr PRIVATE UNICODE _UNICODE)
 endif()
 

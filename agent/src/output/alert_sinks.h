@@ -22,10 +22,12 @@ public:
     explicit JsonlFileSink(const std::wstring& path);
     void Emit(const Finding& f) override;
 
-private:
-    std::wstring path_;
+    // Helpers are public so other sinks/utilities can reuse them.
     static std::string NarrowUtf8(const std::wstring& ws);
     static std::string JsonEscape(const std::string& s);
+
+private:
+    std::wstring path_;
 };
 
 } // namespace miniedr

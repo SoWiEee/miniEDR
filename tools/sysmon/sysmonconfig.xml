@@ -1,15 +1,43 @@
 <!--
-This is a minimal placeholder Sysmon configuration.
+MiniEDR - Phase 2 Sysmon configuration (starter / lab-friendly)
 
-Recommended approach for Phase 1:
-- Enable Event ID 1 (Process Create) at minimum.
-- Optionally enable EID 3 (Network), EID 7 (Image Load) later as you expand detection.
+Goals:
+- Expand telemetry coverage beyond ProcessCreate (EID 1) so Phase 2 features can work:
+  - EID 3  NetworkConnect
+  - EID 7  ImageLoad
+  - EID 8  CreateRemoteThread
+  - EID 10 ProcessAccess
+  - EID 11 FileCreate
+  - EID 13 Registry value set
+  - EID 22 DNS query
+  - EID 23/26 File delete (varies by Sysmon version)
 
-For production-quality configs, you can base this on well-known community configs
-(e.g., SwiftOnSecurity). Always review and adapt for your environment.
+Notes:
+- This is intentionally permissive to help learners observe behaviors.
+- Expect noise in real environments. For production, apply allow/deny lists and tune filters
+  (e.g. based on SwiftOnSecurity / Olaf Hartong's sysmon-modular ideas).
+
+Install / update (Administrator):
+  sysmon64.exe -accepteula -i tools\sysmon\sysmonconfig.xml
+  sysmon64.exe -c tools\sysmon\sysmonconfig.xml
 -->
 <Sysmon schemaversion="4.90">
+  <HashAlgorithms>SHA256,IMPHASH</HashAlgorithms>
+
   <EventFiltering>
+
     <ProcessCreate onmatch="include" />
+    <NetworkConnect onmatch="include" />
+    <ImageLoad onmatch="include" />
+    <CreateRemoteThread onmatch="include" />
+    <ProcessAccess onmatch="include" />
+    <FileCreate onmatch="include" />
+    <RegistryEvent onmatch="include" />
+    <DnsQuery onmatch="include" />
+
+    <!-- File delete event ID differs by Sysmon version; enabling both is harmless. -->
+    <FileDelete onmatch="include" />
+    <FileDeleteDetected onmatch="include" />
+
   </EventFiltering>
 </Sysmon>

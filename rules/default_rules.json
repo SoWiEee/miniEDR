@@ -1,0 +1,148 @@
+{
+  "version": 1,
+  "rules": [
+    {
+      "id": "PROC-001",
+      "title": "Suspicious script interpreter execution",
+      "severity": "Medium",
+      "summary": "A script interpreter or LOLBin executed (PowerShell/cmd/wscript/mshta). Review command line and parent lineage.",
+      "all": [
+        {
+          "field": "type",
+          "op": "equals_any",
+          "values": [
+            "ProcessCreate"
+          ]
+        },
+        {
+          "field": "proc.image",
+          "op": "contains_any",
+          "values": [
+            "powershell.exe",
+            "pwsh.exe",
+            "wscript.exe",
+            "cscript.exe",
+            "cmd.exe",
+            "mshta.exe",
+            "rundll32.exe",
+            "regsvr32.exe"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "PROC-002",
+      "title": "PowerShell encoded command",
+      "severity": "High",
+      "summary": "PowerShell execution with -enc/-EncodedCommand is commonly used to obfuscate payloads.",
+      "all": [
+        {
+          "field": "type",
+          "op": "equals_any",
+          "values": [
+            "ProcessCreate"
+          ]
+        },
+        {
+          "field": "proc.image",
+          "op": "contains_any",
+          "values": [
+            "powershell.exe",
+            "pwsh.exe"
+          ]
+        },
+        {
+          "field": "proc.command_line",
+          "op": "regex_any",
+          "values": [
+            "\\s-(enc|encodedcommand)\\s"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "INJ-001",
+      "title": "High-rights process access (possible injection prep)",
+      "severity": "Medium",
+      "summary": "A process opened another process with broad access rights. This can be benign, but is also used for injection/hollowing workflows.",
+      "all": [
+        {
+          "field": "type",
+          "op": "equals_any",
+          "values": [
+            "ProcessAccess"
+          ]
+        },
+        {
+          "field": "fields.GrantedAccess",
+          "op": "regex_any",
+          "values": [
+            "0x1f(f|F){4}",
+            "0x1fffff"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "INJ-002",
+      "title": "CreateRemoteThread into another process",
+      "severity": "High",
+      "summary": "A process created a thread in another process. Strong injection indicator; review source/target and start address.",
+      "all": [
+        {
+          "field": "type",
+          "op": "equals_any",
+          "values": [
+            "CreateRemoteThread"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "IMG-001",
+      "title": "DLL loaded from user-writable location",
+      "severity": "Medium",
+      "summary": "A process loaded a DLL from a user-writable directory (Temp/AppData). May indicate DLL sideloading/hijacking.",
+      "all": [
+        {
+          "field": "type",
+          "op": "equals_any",
+          "values": [
+            "ImageLoad"
+          ]
+        },
+        {
+          "field": "fields.ImageLoaded",
+          "op": "regex_any",
+          "values": [
+            "\\\\Users\\\\.*\\\\AppData\\\\",
+            "\\\\Windows\\\\Temp\\\\",
+            "\\\\Temp\\\\"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "NET-001",
+      "title": "Executable initiates network connection",
+      "severity": "Low",
+      "summary": "Process initiated a network connection. Use this for pivoting and enrichment (who connected where).",
+      "all": [
+        {
+          "field": "type",
+          "op": "equals_any",
+          "values": [
+            "NetworkConnect"
+          ]
+        },
+        {
+          "field": "fields.DestinationIp",
+          "op": "regex_any",
+          "values": [
+            ".+"
+          ]
+        }
+      ]
+    }
+  ]
+}
