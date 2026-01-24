@@ -1,3 +1,6 @@
+#include <ntddk.h>
+#include <wdf.h>
+#include <wdmsec.h>
 #include "driver.h"
 #include "device.h"
 

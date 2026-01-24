@@ -1,3 +1,6 @@
+#include <ntddk.h>
+#include <wdf.h>
+#include <wdmsec.h>
 #include "device.h"
 #include "queue.h"
 #include "callbacks.h"
@@ -52,7 +55,7 @@ NTSTATUS MiniEdrCreateDevice(_Inout_ PWDFDEVICE_INIT DeviceInit, _Out_ WDFDEVICE
     if (!NT_SUCCESS(status)) return status;
 
     // Initialize ring buffer state
-    auto ctx = DeviceGetContext(device);
+    DEVICE_CONTEXT* ctx = DeviceGetContext(device);
     ctx->WriteIndex = 0;
     ctx->ReadIndex = 0;
     ctx->Dropped = 0;

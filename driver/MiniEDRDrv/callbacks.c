@@ -1,9 +1,13 @@
+#include <ntddk.h>
+#include <wdf.h>
+
 #include "callbacks.h"
 #include "device.h"
 #include "miniedr_ioctl.h"
 
 #include <ntstrsafe.h>
 
+UCHAR* PsGetProcessImageFileName(__in PEPROCESS eprocess);
 extern VOID MiniEdrRingPush(_In_ WDFDEVICE Device, _In_reads_bytes_(Size) const void* Data, _In_ ULONG Size);
 
 static WDFDEVICE g_device = NULL;
@@ -15,7 +19,7 @@ static OB_PREOP_CALLBACK_STATUS MiniEdrPreOp(_In_ PVOID RegistrationContext, _In
 
     if (!g_device) return OB_PREOP_SUCCESS;
 
-    auto ctx = DeviceGetContext(g_device);
+    DEVICE_CONTEXT* ctx = DeviceGetContext(g_device);
     if (!ctx->HandleAuditEnabled) return OB_PREOP_SUCCESS;
 
     // We only audit process handle operations
@@ -86,7 +90,7 @@ VOID MiniEdrPushProcessEvent(_In_ WDFDEVICE Device, _In_ BOOLEAN Create, _In_ HA
     e.ParentPid = (uint32_t)(ULONG_PTR)ParentId;
 
     if (Process) {
-        const char* img = PsGetProcessImageFileName(Process); // 15 chars + null
+        const UCHAR* img = PsGetProcessImageFileName(Process);
         RtlCopyMemory(e.ImageFileName, img, 15);
         e.ImageFileName[15] = 0;
     }

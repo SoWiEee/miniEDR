@@ -1,7 +1,9 @@
+#include <ntddk.h>
+#include <wdf.h>
+#include <wdmsec.h>
 #include "queue.h"
 #include "device.h"
 #include "miniedr_ioctl.h"
-
 #include <ntstrsafe.h>
 
 #define RING_CAPACITY 1024
@@ -18,7 +20,7 @@ static MINIEDR_EVT_IMAGELOAD g_ring[RING_CAPACITY];
 // Producer: write a binary blob into next slot (truncates to SLOT_SIZE)
 static VOID RingPush(_In_ WDFDEVICE Device, _In_reads_bytes_(Size) const void* Data, _In_ ULONG Size)
 {
-    auto ctx = DeviceGetContext(Device);
+    DEVICE_CONTEXT* ctx = DeviceGetContext(Device);
 
     WdfSpinLockAcquire(ctx->EventLock);
 
@@ -40,14 +42,15 @@ static VOID RingPush(_In_ WDFDEVICE Device, _In_reads_bytes_(Size) const void* D
 // Consumer: copy as many events as will fit into OutBuffer
 static ULONG RingPopMany(_In_ WDFDEVICE Device, _Out_writes_bytes_(OutCap) uint8_t* OutBuffer, _In_ ULONG OutCap)
 {
-    auto ctx = DeviceGetContext(Device);
+
+    DEVICE_CONTEXT* ctx = DeviceGetContext(Device);
     ULONG written = 0;
 
     WdfSpinLockAcquire(ctx->EventLock);
 
     while (ctx->ReadIndex != ctx->WriteIndex) {
-        auto* slot = &g_ring[ctx->ReadIndex];
-        ULONG sz = ((MINIEDR_EVT_IMAGELOAD*)slot)->H.Size;
+        MINIEDR_EVT_IMAGELOAD* slot = &g_ring[ctx->ReadIndex];
+        ULONG sz = (slot)->H.Size;
         if (sz == 0 || sz > SLOT_SIZE) sz = SLOT_SIZE;
 
         if (written + sz > OutCap) break;
@@ -88,8 +91,7 @@ VOID MiniEdrEvtIoDeviceControl(_In_ WDFQUEUE Queue,
 {
     UNREFERENCED_PARAMETER(InputBufferLength);
 
-    WDFDEVICE device = WDF_NO_HANDLE;
-    device = WdfIoQueueGetDevice(Queue);
+    WDFDEVICE device = WdfIoQueueGetDevice(Queue);
     NTSTATUS status = STATUS_SUCCESS;
     size_t bytes = 0;
 
@@ -112,7 +114,7 @@ VOID MiniEdrEvtIoDeviceControl(_In_ WDFQUEUE Queue,
         const MINIEDR_POLICY* in = NULL;
         status = WdfRequestRetrieveInputBuffer(Request, sizeof(MINIEDR_POLICY), (PVOID*)&in, NULL);
         if (NT_SUCCESS(status)) {
-            auto ctx = DeviceGetContext(device);
+            DEVICE_CONTEXT* ctx = DeviceGetContext(device);
             ctx->HandleAuditEnabled = (in->EnableHandleAudit != 0) ? TRUE : FALSE;
             bytes = 0;
         }
