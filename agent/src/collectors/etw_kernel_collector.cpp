@@ -2,7 +2,6 @@
 
 #ifdef _WIN32
 
-// Important: define INITGUID in exactly one translation unit.
 #define INITGUID
 
 #include <windows.h>

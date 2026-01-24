@@ -1,11 +1,13 @@
 #include "collectors/sysmon_collector.h"
 #include "collectors/etw_kernel_collector.h"
+#include "collectors/driver_collector.h"
 
 #include "pipeline/normalizer.h"
 #include "detection/rule_engine.h"
 #include "detection/correlator.h"
 #include "output/alert_sinks.h"
 #include "scanners/scanner_manager.h"
+#include "response/response_manager.h"
 
 #include <atomic>
 #include <csignal>
@@ -59,6 +61,12 @@ int wmain(int argc, wchar_t** argv) {
     auto scan_cfg = LoadScannerConfig(L"agent\\config\\scanners.json");
     ScannerManager scanner_mgr(scan_cfg);
 
+    // Phase 3: response actions (disabled by default)
+    ResponseConfig resp_cfg;
+    resp_cfg.enable_response = false;
+    resp_cfg.auto_terminate_on_critical = false;
+    ResponseManager resp_mgr(resp_cfg);
+
     auto EmitFindings = [&](const std::vector<Finding>& findings) {
     for (const auto& f : findings) {
         EnrichedFinding ef;
@@ -71,6 +79,8 @@ int wmain(int argc, wchar_t** argv) {
         ef.scans = scanner_mgr.RunOnDemand(f);
 
         for (auto& s : sinks) s->EmitEnriched(ef);
+
+            (void)resp_mgr.Handle(ef);
     }
 };
 
@@ -102,6 +112,16 @@ int wmain(int argc, wchar_t** argv) {
         });
     } else {
         std::wcout << L"[Main] ETW disabled.\n";
+    }
+    std::unique_ptr<DriverCollector> kmdf;
+    // Phase 4: optional KMDF kernel driver telemetry via IOCTL (\\.\MiniEDRDrv)
+    // If the driver is not installed/running, this collector will fail open and the agent continues.
+    kmdf = std::make_unique<DriverCollector>();
+    if (!kmdf->Start([&](const CanonicalEvent& ev) { HandleEvent(ev); })) {
+        std::wcout << L"[Main] KMDF driver collector not available.\n";
+        kmdf.reset();
+    } else {
+        std::wcout << L"[Main] KMDF driver collector enabled.\n";
     }
 
     while (g_running) {

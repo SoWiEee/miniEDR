@@ -1,6 +1,7 @@
 #include "scanners/scanner_manager.h"
 #include "scanners/pe_sieve_adapter.h"
 #include "scanners/hollows_hunter_adapter.h"
+#include "scanners/yara/yara_adapter.h"
 
 #ifdef _WIN32
 #include <windows.h>
@@ -35,6 +36,9 @@ ScannerManager::ScannerManager(ScannerConfig cfg) : cfg_(std::move(cfg)) {
     }
     if (!cfg_.hollows_hunter_path.empty()) {
         scanners_.push_back(std::make_unique<HollowsHunterAdapter>(cfg_.hollows_hunter_path));
+    }
+    if (!cfg_.yara_path.empty() && !cfg_.yara_rules.empty()) {
+        scanners_.push_back(std::make_unique<YaraAdapter>(cfg_.yara_path, cfg_.yara_rules, cfg_.yara_recursive));
     }
 }
 
@@ -137,6 +141,9 @@ ScannerConfig LoadScannerConfig(const std::wstring& path) {
     cfg.scan_rule_ids = GetJsonStringArray(j, "scan_rule_ids");
     cfg.pe_sieve_path = GetJsonString(j, "pe_sieve_path");
     cfg.hollows_hunter_path = GetJsonString(j, "hollows_hunter_path");
+    cfg.yara_path = GetJsonString(j, "yara_path");
+    cfg.yara_rules = GetJsonString(j, "yara_rules");
+    cfg.yara_recursive = GetJsonBool(j, "yara_recursive", true);
     return cfg;
 }
 

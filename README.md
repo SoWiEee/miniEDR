@@ -173,3 +173,105 @@ Outputs:
 and `alerts.jsonl` includes a `scans` array.
 
 See also: `docs/scanners.md`.
+
+
+## Phase 3 (enhanced): Defense-in-depth add-ons
+
+This update focuses on making the Phase 3 feature-set more complete, while keeping the project approachable.
+
+### Deep post-event scanners (on-demand)
+
+MiniEDR runs deep scanners **only after an alert** is generated (performance-first design). Adapters included:
+- PE-sieve adapter (per-PID scan, reads `scan_report.json` when available)
+- HollowsHunter adapter (per-PID scan, searches for JSON reports recursively)
+- YARA adapter (runs `yara` CLI to scan a PID on-demand; bring your own rules)
+
+Configuration:
+- `agent/config/scanners.json` controls:
+  - which severities/rule IDs trigger scans
+  - tool paths (not redistributed): `tools\bin\pe-sieve64.exe`, `tools\bin\hollows_hunter64.exe`, `tools\bin\yara64.exe`
+  - YARA rules folder (default: `rules\yara\`)
+
+Operational note: YARA supports scanning a running process by using PID as the TARGET argument in the CLI. citeturn0search1turn0search9turn0search19
+
+### Full XML parsing and stronger normalization
+
+Sysmon events are rendered as XML via Windows Event Log APIs. Earlier phases used pragmatic string/regex extraction.
+Phase 3 now prefers **XmlLite (IXmlReader)** parsing to extract:
+- `EventID`
+- `TimeCreated/@SystemTime`
+- all `<Data Name="...">...</Data>` fields
+
+This reduces parser fragility and is a stepping stone toward stronger schema validation. citeturn0search2turn0search10
+
+### Response actions (optional; disabled by default)
+
+A response manager scaffold is added (currently off by default) to keep the core detection path safe and predictable.
+Implemented example action:
+- terminate process for **Critical** alerts (when enabled)
+
+Files:
+- `agent/src/response/*`
+
+You can extend this with: suspend process, isolate host/network, quarantine file, block hash, etc.
+
+### Hooking and sandboxing (documented boundaries)
+
+Hooking and sandboxing are complex and can be risky if enabled by default. In Phase 3 we:
+- define intended module boundaries
+- keep them opt-in / future work
+
+See:
+- `agent/src/hooking/README.md`
+- `agent/src/sandbox/README.md`
+
+### Kernel driver scaffolding (optional; not built in CMake)
+
+Kernel callbacks (ObRegisterCallbacks, PsSetCreateProcessNotifyRoutineEx, etc.) are best implemented in a driver and require WDK.
+Phase 3 adds a documentation scaffold under `driver/` with guidance and references to official samples. citeturn0search7turn0search3
+
+
+## Phase 4: KMDF kernel driver telemetry (IOCTL)
+
+Phase 4 adds a real **WDK/KMDF** kernel driver project that streams kernel telemetry events to user-mode via **IOCTL**.
+This integrates with the existing architecture by introducing an additional collector (`DriverCollector`) that feeds
+kernel events into the same Normalize/Rules/Correlator pipeline.
+
+### What the driver provides (MVP)
+
+The driver (`driver/MiniEDRDrv`) registers callbacks:
+- Process create/exit: `PsSetCreateProcessNotifyRoutineEx`
+- Image load: `PsSetLoadImageNotifyRoutine`
+- Process handle audit: `ObRegisterCallbacks` (audit-only; no blocking in this milestone)
+
+The driver stores events in a fixed-size nonpaged ring buffer and user-mode pulls events using:
+- `DeviceIoControl(IOCTL_MINIEDR_GET_EVENTS)` on `\\.\MiniEDRDrv`
+
+Shared IOCTL definitions:
+- `driver/include/miniedr_ioctl.h`
+
+### Build the driver
+
+Prerequisites:
+- Visual Studio 2022
+- Windows Driver Kit (WDK) for Windows 10/11
+- A test environment (VM recommended)
+
+Open and build:
+- `driver/MiniEDRDrv/MiniEDRDrv.vcxproj` (x64 Debug/Release)
+
+### Install and run
+
+The repo ships a minimal `MiniEDRDrv.inf` for test setups. Driver signing is enforced on modern Windows;
+use appropriate developer/test signing methods in a VM. Do not deploy unsigned test drivers on production systems.
+
+Once installed and started, the MiniEDR user-mode agent will automatically attempt to connect to `\\.\MiniEDRDrv`.
+If the driver is unavailable, the agent continues without kernel telemetry (fail-open).
+
+### Extending beyond MVP
+
+Recommended next increments:
+- Convert QPC timestamps to wall time in user-mode for consistent timelines
+- Add optional enforcement policy (deny suspicious handle opens) with careful allowlists
+- Add per-event variable payloads and schema versioning
+- Add an IOCTL to request driver-side enrichments (e.g., image path from kernel cache)

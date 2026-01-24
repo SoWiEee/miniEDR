@@ -2,7 +2,14 @@
   "enable_on_demand": true,
   "output_root": "scan_outputs",
   "scan_on_high": true,
-  "scan_rule_ids": ["INJ-", "HOLLOW-", "PROC-003"],
+  "scan_rule_ids": [
+    "INJ-",
+    "HOLLOW-",
+    "PROC-003"
+  ],
   "pe_sieve_path": "tools\\bin\\pe-sieve64.exe",
-  "hollows_hunter_path": "tools\\bin\\hollows_hunter64.exe"
+  "hollows_hunter_path": "tools\\bin\\hollows_hunter64.exe",
+  "yara_path": "tools\\bin\\yara64.exe",
+  "yara_rules": "rules\\yara",
+  "yara_recursive": true
 }

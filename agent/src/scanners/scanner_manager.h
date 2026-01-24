@@ -14,6 +14,9 @@ struct ScannerConfig {
     std::vector<std::wstring> scan_rule_ids;
     std::wstring pe_sieve_path;
     std::wstring hollows_hunter_path;
+    std::wstring yara_path;
+    std::wstring yara_rules;
+    bool yara_recursive = true;
 };
 
 class ScannerManager {

@@ -1,4 +1,5 @@
 #include "pipeline/normalizer.h"
+#include "utils/xml_event_parser.h"
 
 #include <regex>
 
@@ -44,11 +45,27 @@ static void FillActorFromSysmonFields(CanonicalEvent& ev, const std::wstring& xm
 }
 
 std::optional<CanonicalEvent> Normalizer::NormalizeSysmonXml(uint32_t sysmon_eid, const std::wstring& xml) {
+    auto parsed = ParseWindowsEventXml(xml);
+auto Get = [&](const std::wstring& key) -> std::wstring {
+    if (parsed.ok) {
+        auto it = parsed.data.find(key);
+        if (it != parsed.data.end()) return it->second;
+    }
+    return ExtractDataField(xml, key);
+};
+auto GetU32 = [&](const std::wstring& key) -> uint32_t {
+    auto s = Get(key);
+    if (s.empty()) return 0;
+    try { return static_cast<uint32_t>(std::stoul(s)); } catch (...) { return 0; }
+};
+
+    // If XmlLite parsing fails, fall back to Phase 1 regex extraction.
+
     CanonicalEvent ev;
     ev.source = L"sysmon";
     ev.source_eid = sysmon_eid;
     ev.raw_xml = xml;
-    ev.timestamp_utc = ExtractSystemTimeUtc(xml);
+    ev.timestamp_utc = parsed.ok ? parsed.system_time_utc : ExtractSystemTimeUtc(xml);
 
     switch (sysmon_eid) {
     case 1: { // ProcessCreate
