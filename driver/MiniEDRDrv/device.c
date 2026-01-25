@@ -1,6 +1,3 @@
-#include <ntddk.h>
-#include <wdf.h>
-#include <wdmsec.h>
 #include "device.h"
 #include "queue.h"
 #include "callbacks.h"
@@ -13,6 +10,13 @@ static VOID MiniEdrDeviceContextCleanup(_In_ WDFOBJECT DeviceObject)
 {
     WDFDEVICE device = (WDFDEVICE)DeviceObject;
     UNREFERENCED_PARAMETER(device);
+    DEVICE_CONTEXT* ctx = DeviceGetContext(device);
+    if (ctx->PolicyLock) WdfSpinLockAcquire(ctx->PolicyLock);
+    if (ctx->ProtectedPids) { ExFreePoolWithTag(ctx->ProtectedPids, 'rPdM'); ctx->ProtectedPids = NULL; }
+    if (ctx->AllowedPids) { ExFreePoolWithTag(ctx->AllowedPids, 'aPdM'); ctx->AllowedPids = NULL; }
+    ctx->ProtectedCount = ctx->AllowedCount = 0;
+    if (ctx->PolicyLock) WdfSpinLockRelease(ctx->PolicyLock);
+
     MiniEdrUnregisterCallbacks();
 }
 
@@ -60,8 +64,16 @@ NTSTATUS MiniEdrCreateDevice(_Inout_ PWDFDEVICE_INIT DeviceInit, _Out_ WDFDEVICE
     ctx->ReadIndex = 0;
     ctx->Dropped = 0;
     ctx->HandleAuditEnabled = TRUE;
+    ctx->EnforceProtect = FALSE;
+    ctx->ProtectedCount = 0;
+    ctx->AllowedCount = 0;
+    ctx->ProtectedPids = NULL;
+    ctx->AllowedPids = NULL;
 
     status = WdfSpinLockCreate(WDF_NO_OBJECT_ATTRIBUTES, &ctx->EventLock);
+    if (!NT_SUCCESS(status)) return status;
+
+    status = WdfSpinLockCreate(WDF_NO_OBJECT_ATTRIBUTES, &ctx->PolicyLock);
     if (!NT_SUCCESS(status)) return status;
 
     status = MiniEdrQueueInitialize(device);

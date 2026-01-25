@@ -1,11 +1,21 @@
-#include <ntddk.h>
-#include <wdf.h>
-
 #include "callbacks.h"
 #include "device.h"
-#include "miniedr_ioctl.h"
+#include "../include/miniedr_ioctl.h"
 
-#include <ntstrsafe.h>
+#define PROCESS_TERMINATE (0x0001)
+#define PROCESS_CREATE_THREAD (0x0002)
+#define PROCESS_SET_SESSIONID (0x0004)
+#define PROCESS_VM_OPERATION (0x0008)
+#define PROCESS_VM_READ (0x0010)
+#define PROCESS_VM_WRITE (0x0020)
+#define PROCESS_DUP_HANDLE (0x0040)
+#define PROCESS_CREATE_PROCESS (0x0080)
+#define PROCESS_SET_QUOTA (0x0100)
+#define PROCESS_SET_INFORMATION (0x0200)
+#define PROCESS_QUERY_INFORMATION (0x0400)
+#define PROCESS_SUSPEND_RESUME (0x0800)
+#define PROCESS_QUERY_LIMITED_INFORMATION (0x1000)
+#define PROCESS_SET_LIMITED_INFORMATION (0x2000)
 
 UCHAR* PsGetProcessImageFileName(__in PEPROCESS eprocess);
 extern VOID MiniEdrRingPush(_In_ WDFDEVICE Device, _In_reads_bytes_(Size) const void* Data, _In_ ULONG Size);
@@ -13,47 +23,136 @@ extern VOID MiniEdrRingPush(_In_ WDFDEVICE Device, _In_reads_bytes_(Size) const 
 static WDFDEVICE g_device = NULL;
 static PVOID g_obHandle = NULL;
 
-static OB_PREOP_CALLBACK_STATUS MiniEdrPreOp(_In_ PVOID RegistrationContext, _Inout_ POB_PRE_OPERATION_INFORMATION OperationInformation)
+static BOOLEAN IsPidInList(_In_reads_opt_(count) const UINT32* list, _In_ UINT32 count, _In_ UINT32 pid)
+{
+    if (!list || count == 0) return FALSE;
+    for (UINT32 i = 0; i < count; ++i) {
+        if (list[i] == pid) return TRUE;
+    }
+    return FALSE;
+}
+
+static BOOLEAN IsDangerousProcessAccess(_In_ ACCESS_MASK a)
+{
+    const ACCESS_MASK dangerous =
+        PROCESS_CREATE_THREAD |
+        PROCESS_VM_OPERATION |
+        PROCESS_VM_READ |
+        PROCESS_VM_WRITE |
+        PROCESS_DUP_HANDLE |
+        PROCESS_TERMINATE |
+        PROCESS_SUSPEND_RESUME |
+        PROCESS_SET_INFORMATION |
+        PROCESS_SET_QUOTA;
+    return (a & dangerous) != 0;
+}
+
+static OB_PREOP_CALLBACK_STATUS
+MiniEdrPreOp(
+    _In_ PVOID RegistrationContext,
+    _Inout_ POB_PRE_OPERATION_INFORMATION OperationInformation
+)
 {
     UNREFERENCED_PARAMETER(RegistrationContext);
 
-    if (!g_device) return OB_PREOP_SUCCESS;
+    if (g_device == NULL) {
+        return OB_PREOP_SUCCESS;
+    }
 
-    DEVICE_CONTEXT* ctx = DeviceGetContext(g_device);
-    if (!ctx->HandleAuditEnabled) return OB_PREOP_SUCCESS;
+    // Optional hardening: ignore kernel handles
+    // KernelHandle bit is part of OB_PRE_OPERATION_INFORMATION
+    if (OperationInformation->KernelHandle) {
+        return OB_PREOP_SUCCESS;
+    }
 
-    // We only audit process handle operations
-    if (OperationInformation->ObjectType != *PsProcessType) return OB_PREOP_SUCCESS;
+    PDEVICE_CONTEXT ctx = DeviceGetContext(g_device);
+    if (!ctx->HandleAuditEnabled) {
+        return OB_PREOP_SUCCESS;
+    }
 
-    ULONG srcPid = (ULONG)(ULONG_PTR)PsGetCurrentProcessId();
+    // Only process handle operations
+    if (OperationInformation->ObjectType != *PsProcessType) {
+        return OB_PREOP_SUCCESS;
+    }
+
+    // Target PID
     ULONG tgtPid = 0;
-
     PEPROCESS target = (PEPROCESS)OperationInformation->Object;
-    if (target) {
+    if (target != NULL) {
         tgtPid = (ULONG)(ULONG_PTR)PsGetProcessId(target);
     }
 
-    ACCESS_MASK desired = 0;
+    // Source PID (note: callback may run in arbitrary thread context per docs;
+    // this is still the common pattern used for audit/enforcement heuristics)
+    ULONG srcPid = (ULONG)(ULONG_PTR)PsGetCurrentProcessId();
+
+    // Get a pointer to DesiredAccess + record operation type
+    ACCESS_MASK* pDesired = NULL;
+    ACCESS_MASK original = 0;
     ULONG op = 0;
+
     if (OperationInformation->Operation == OB_OPERATION_HANDLE_CREATE) {
-        desired = OperationInformation->Parameters->CreateHandleInformation.DesiredAccess;
+        pDesired = &OperationInformation->Parameters->CreateHandleInformation.DesiredAccess;
+        original = OperationInformation->Parameters->CreateHandleInformation.OriginalDesiredAccess;
         op = 1;
-    } else if (OperationInformation->Operation == OB_OPERATION_HANDLE_DUPLICATE) {
-        desired = OperationInformation->Parameters->DuplicateHandleInformation.DesiredAccess;
+    }
+    else if (OperationInformation->Operation == OB_OPERATION_HANDLE_DUPLICATE) {
+        pDesired = &OperationInformation->Parameters->DuplicateHandleInformation.DesiredAccess;
+        original = OperationInformation->Parameters->DuplicateHandleInformation.OriginalDesiredAccess;
         op = 2;
     }
+    else {
+        return OB_PREOP_SUCCESS;
+    }
 
-    MINIEDR_EVT_HANDLEACCESS e = {0};
+    // Optional enforcement: protect selected PIDs from dangerous access
+    BOOLEAN enforce = FALSE;
+    BOOLEAN targetProtected = FALSE;
+    BOOLEAN srcAllowed = FALSE;
+
+    WdfSpinLockAcquire(ctx->PolicyLock);
+    enforce = ctx->EnforceProtect;
+    if (enforce) {
+        targetProtected = IsPidInList(ctx->ProtectedPids, ctx->ProtectedCount, tgtPid);
+        srcAllowed = IsPidInList(ctx->AllowedPids, ctx->AllowedCount, srcPid);
+    }
+    WdfSpinLockRelease(ctx->PolicyLock);
+
+    // If enforced, strip dangerous rights
+    if (enforce && targetProtected && !srcAllowed && srcPid != tgtPid && srcPid != 4 /* System */)
+    {
+        if (IsDangerousProcessAccess(*pDesired)) {
+            const ACCESS_MASK dangerous =
+                PROCESS_CREATE_THREAD |
+                PROCESS_VM_OPERATION |
+                PROCESS_VM_READ |
+                PROCESS_VM_WRITE |
+                PROCESS_DUP_HANDLE |
+                PROCESS_TERMINATE |
+                PROCESS_SUSPEND_RESUME |
+                PROCESS_SET_INFORMATION |
+                PROCESS_SET_QUOTA;
+
+            // Option A: remove only dangerous bits (recommended for ¡§least surprise¡¨)
+            *pDesired &= ~dangerous;
+
+            // Option B (stricter): force to zero access
+            // *pDesired = 0;
+        }
+    }
+
+    // Audit event
+    MINIEDR_EVT_HANDLEACCESS e = { 0 };
     e.H.Type = MiniEdrEvent_HandleAccess;
     e.H.Size = sizeof(e);
-    e.H.TimestampQpc = (uint64_t)KeQueryPerformanceCounter(NULL).QuadPart;
+    e.H.TimestampQpc = (UINT64)KeQueryPerformanceCounter(NULL).QuadPart;
     e.SourcePid = srcPid;
     e.TargetPid = tgtPid;
-    e.DesiredAccess = (uint32_t)desired;
+    e.DesiredAccess = (UINT32)(pDesired ? *pDesired : 0);
     e.Operation = op;
 
     MiniEdrRingPush(g_device, &e, sizeof(e));
-    return OB_PREOP_SUCCESS; // audit only
+    return OB_PREOP_SUCCESS;
 }
 
 static VOID MiniEdrProcessNotifyEx(_Inout_ PEPROCESS Process,
@@ -85,9 +184,9 @@ VOID MiniEdrPushProcessEvent(_In_ WDFDEVICE Device, _In_ BOOLEAN Create, _In_ HA
     MINIEDR_EVT_PROCESS e = {0};
     e.H.Type = Create ? MiniEdrEvent_ProcessCreate : MiniEdrEvent_ProcessExit;
     e.H.Size = sizeof(e);
-    e.H.TimestampQpc = (uint64_t)KeQueryPerformanceCounter(NULL).QuadPart;
-    e.Pid = (uint32_t)(ULONG_PTR)ProcessId;
-    e.ParentPid = (uint32_t)(ULONG_PTR)ParentId;
+    e.H.TimestampQpc = (UINT64)KeQueryPerformanceCounter(NULL).QuadPart;
+    e.Pid = (UINT32)(ULONG_PTR)ProcessId;
+    e.ParentPid = (UINT32)(ULONG_PTR)ParentId;
 
     if (Process) {
         const UCHAR* img = PsGetProcessImageFileName(Process);
@@ -103,8 +202,8 @@ VOID MiniEdrPushImageLoadEvent(_In_ WDFDEVICE Device, _In_ HANDLE ProcessId, _In
     MINIEDR_EVT_IMAGELOAD e = {0};
     e.H.Type = MiniEdrEvent_ImageLoad;
     e.H.Size = sizeof(e);
-    e.H.TimestampQpc = (uint64_t)KeQueryPerformanceCounter(NULL).QuadPart;
-    e.Pid = (uint32_t)(ULONG_PTR)ProcessId;
+    e.H.TimestampQpc = (UINT64)KeQueryPerformanceCounter(NULL).QuadPart;
+    e.Pid = (UINT32)(ULONG_PTR)ProcessId;
 
     if (FullImageName && FullImageName->Buffer) {
         // Truncate safely
@@ -124,10 +223,10 @@ VOID MiniEdrPushHandleAccessEvent(_In_ WDFDEVICE Device, _In_ ULONG SourcePid, _
     MINIEDR_EVT_HANDLEACCESS e = {0};
     e.H.Type = MiniEdrEvent_HandleAccess;
     e.H.Size = sizeof(e);
-    e.H.TimestampQpc = (uint64_t)KeQueryPerformanceCounter(NULL).QuadPart;
+    e.H.TimestampQpc = (UINT64)KeQueryPerformanceCounter(NULL).QuadPart;
     e.SourcePid = SourcePid;
     e.TargetPid = TargetPid;
-    e.DesiredAccess = (uint32_t)DesiredAccess;
+    e.DesiredAccess = (UINT32)DesiredAccess;
     e.Operation = Operation;
     MiniEdrRingPush(Device, &e, sizeof(e));
 }
