@@ -1,7 +1,7 @@
 #pragma once
 #include <ntddk.h>
 #include <wdf.h>
-#include "miniedr_ioctl.h"
+#include "../include/miniedr_ioctl.h"
 
 DRIVER_INITIALIZE DriverEntry;
 EVT_WDF_DRIVER_DEVICE_ADD MiniEdrEvtDeviceAdd;
