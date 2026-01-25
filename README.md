@@ -275,3 +275,30 @@ Recommended next increments:
 - Add optional enforcement policy (deny suspicious handle opens) with careful allowlists
 - Add per-event variable payloads and schema versioning
 - Add an IOCTL to request driver-side enrichments (e.g., image path from kernel cache)
+
+
+### Phase 4+: Kernel telemetry enrichment (user-mode)
+
+Kernel events are intentionally compact. After receiving a kernel event, the agent performs **best-effort enrichment**:
+- Full image path (`QueryFullProcessImageName`)
+- Command line (PEB read via `NtQueryInformationProcess` + `ReadProcessMemory`)
+- User (`OpenProcessToken` + `LookupAccountSid`)
+- Image hash (SHA-256)
+- Authenticode signature verification and signer subject/issuer (best-effort)
+
+These fields are stored into `CanonicalEvent.proc` / `CanonicalEvent.target` (`ProcessInfo`) for correlation and triage.
+See: `agent/src/enrich/process_enricher.*`.
+
+
+### Phase 4+: Optional enforcement policy (deny process access)
+
+The KMDF driver can optionally **deny dangerous process-handle operations** against protected PIDs.
+This is implemented in the `ObRegisterCallbacks` pre-operation callback.
+
+How it works:
+- The user-mode agent pushes a policy to the driver at startup (`agent/config/driver_policy.json`).
+- The agent automatically adds its own PID to `protected_pids` and `allowed_pids`.
+- If `enable_enforcement=true`, and a non-allowlisted source requests dangerous access to a protected PID,
+  the driver returns `STATUS_ACCESS_DENIED` for that specific handle operation.
+
+Start with enforcement disabled and validate stability on a VM. Build a conservative allowlist before enabling.
