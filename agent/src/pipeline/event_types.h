@@ -36,6 +36,13 @@ struct ProcessInfo {
     std::wstring image;        // full path if available
     std::wstring command_line;
     std::wstring user;
+
+    // Phase 4+: enrichment fields (best-effort)
+    std::wstring image_sha256;       // SHA-256 of image file (if resolved)
+    std::wstring signer_subject;     // leaf cert subject (if Authenticode verified)
+    std::wstring signer_issuer;      // leaf cert issuer
+    bool signer_trusted = false;     // signature verification passed
+    bool signer_is_microsoft = false;
 };
 
 // A small canonical schema we can use across multiple telemetry sources.
