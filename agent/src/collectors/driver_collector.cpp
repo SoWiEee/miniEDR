@@ -1,6 +1,7 @@
 #include "collectors/driver_collector.h"
+#include "enrich/process_enricher.h"
+#include "driver/driver_policy.h"
 #ifdef _WIN32
-#include <winioctl.h>
 
 #include <iostream>
 #include <chrono>
@@ -44,6 +45,20 @@ bool DriverCollector::Start(Callback cb) {
         std::wcout << L"[DriverCollector] Driver version: 0x" << std::hex << vi.Version << std::dec << L"\n";
     }
 
+// Apply driver enforcement policy (optional). We always add this agent PID to protected_pids
+// so that, when enabled, dangerous handle access to the agent can be denied in kernel.
+auto pol = LoadDriverPolicyConfig(L"agent\\config\\driver_policy.json");
+pol.protected_pids.push_back(GetCurrentProcessId());
+// Allow this agent itself to access protected targets.
+pol.allowed_pids.push_back(GetCurrentProcessId());
+
+if (!ApplyDriverPolicy(h_, pol)) {
+    std::wcout << L"[DriverCollector] Policy not applied (driver may not support v2 yet).\n";
+} else {
+    std::wcout << L"[DriverCollector] Policy applied. enforcement="
+               << (pol.enable_enforcement ? L"true" : L"false") << L"\n";
+}
+
     running_ = true;
     t_ = std::thread([this]{ ThreadLoop(); });
     return true;
@@ -77,6 +92,7 @@ void DriverCollector::ThreadLoop() {
 }
 
 void DriverCollector::HandleEventBlob(const uint8_t* data, size_t len) {
+    static const ProcessEnricher enricher;
     size_t off = 0;
     while (off + sizeof(MINIEDR_EVENT_HEADER) <= len) {
         auto* h = reinterpret_cast<const MINIEDR_EVENT_HEADER*>(data + off);
@@ -100,13 +116,18 @@ void DriverCollector::HandleEventBlob(const uint8_t* data, size_t len) {
             ev.proc.pid = im->Pid;
             ev.proc.image = im->ImagePath; // using image field for loaded module path (Phase 4 will add dedicated fields map)
         } else if (h->Type == MiniEdrEvent_HandleAccess) {
+            ev.type = EventType::ProcessAccess;
             auto* ha = reinterpret_cast<const MINIEDR_EVT_HANDLEACCESS*>(data + off);
-            ev.type = EventType::Unknown; // Phase 4: map to ProcessAccess telemetry
             ev.proc.pid = ha->SourcePid;
+            ev.target.pid = ha->TargetPid;
+            ev.fields[L"GrantedAccess"] = std::to_wstring(ha->DesiredAccess);
+            ev.fields[L"Operation"] = std::to_wstring(ha->Operation);
             ev.proc.ppid = 0;
         } else {
             // ignore unknown types
         }
+
+        enricher.Enrich(ev);
 
         if (cb_) cb_(ev);
         off += h->Size;
