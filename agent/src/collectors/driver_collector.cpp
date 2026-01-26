@@ -1,6 +1,9 @@
 #include "collectors/driver_collector.h"
 #include "enrich/process_enricher.h"
 #include "driver/driver_policy.h"
+#include "driver/signer_trust.h"
+#include <unordered_set>
+#include <winioctl.h>
 #ifdef _WIN32
 
 #include <iostream>
@@ -93,6 +96,8 @@ void DriverCollector::ThreadLoop() {
 
 void DriverCollector::HandleEventBlob(const uint8_t* data, size_t len) {
     static const ProcessEnricher enricher;
+    static const auto trustCfg = LoadSignerTrustConfig(L"agent\\config\\signer_trust.json");
+    static std::unordered_set<uint32_t> dynAllowed;
     size_t off = 0;
     while (off + sizeof(MINIEDR_EVENT_HEADER) <= len) {
         auto* h = reinterpret_cast<const MINIEDR_EVENT_HEADER*>(data + off);
@@ -128,6 +133,28 @@ void DriverCollector::HandleEventBlob(const uint8_t* data, size_t len) {
         }
 
         enricher.Enrich(ev);
+
+// Phase 5: signer-based dynamic allowlist.
+if (ev.type == EventType::ProcessAccess && h->Type == MiniEdrEvent_HandleAccess) {
+    auto* ha = reinterpret_cast<const MINIEDR_EVT_HANDLEACCESS*>(data + off);
+    uint32_t src = ha->SourcePid;
+    if (ha->Decision == MiniEdrDecision_Stripped || ha->Decision == MiniEdrDecision_Denied) {
+        bool okSigner = IsSignerAllowed(trustCfg,
+                                       ev.proc.signer_trusted,
+                                       ev.proc.signer_is_microsoft,
+                                       ev.proc.signer_subject,
+                                       ev.proc.signer_issuer);
+        if (okSigner) {
+            if (dynAllowed.find(src) == dynAllowed.end()) {
+                if (DriverAllowlistAdd(h_, src)) {
+                    dynAllowed.insert(src);
+                    std::wcout << L"[DriverCollector] allowlisted PID " << src
+                               << L" based on signer (" << ev.proc.signer_subject << L").\n";
+                }
+            }
+        }
+    }
+}
 
         if (cb_) cb_(ev);
         off += h->Size;

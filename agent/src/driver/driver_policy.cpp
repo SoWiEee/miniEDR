@@ -4,8 +4,9 @@
 #include <fstream>
 #include <sstream>
 #include <algorithm>
+#include <winioctl.h>
 
-#include "miniedr_ioctl.h"
+#include "../../driver/include/miniedr_ioctl.h"
 
 namespace miniedr {
 
@@ -57,12 +58,23 @@ DriverPolicyConfig LoadDriverPolicyConfig(const std::wstring& path) {
     if (txt.empty()) return cfg;
 
     // enable_enforcement: true/false
+    bool strip = true;
     auto pos = txt.find(L"\"enable_enforcement\"");
     if (pos != std::wstring::npos) {
         auto tpos = txt.find(L"true", pos);
         auto fpos = txt.find(L"false", pos);
         if (tpos != std::wstring::npos && (fpos == std::wstring::npos || tpos < fpos)) cfg.enable_enforcement = true;
     }
+
+    // strip_instead_of_deny: true/false
+    pos = txt.find(L"\"strip_instead_of_deny\"");
+    if (pos != std::wstring::npos) {
+        auto tpos = txt.find(L"true", pos);
+        auto fpos = txt.find(L"false", pos);
+        if (fpos != std::wstring::npos && (tpos == std::wstring::npos || fpos < tpos)) strip = false;
+        else if (tpos != std::wstring::npos) strip = true;
+    }
+    cfg.strip_instead_of_deny = strip;
 
     cfg.protected_pids = ParseIntArray(txt, L"protected_pids");
     cfg.allowed_pids = ParseIntArray(txt, L"allowed_pids");
@@ -81,6 +93,7 @@ bool ApplyDriverPolicy(HANDLE hDevice, const DriverPolicyConfig& cfg) {
     auto* p = reinterpret_cast<MINIEDR_POLICY_V2*>(buf.data());
     p->Version = MINIEDR_IOCTL_VERSION;
     p->Flags = cfg.enable_enforcement ? MINIEDR_POLICY_FLAG_ENFORCE_PROTECT : 0;
+    if (cfg.enable_enforcement && cfg.strip_instead_of_deny) p->Flags |= MINIEDR_POLICY_FLAG_STRIP_INSTEAD_OF_DENY;
     p->ProtectedPidCount = protN;
     p->AllowedPidCount = allowN;
 
@@ -91,6 +104,22 @@ bool ApplyDriverPolicy(HANDLE hDevice, const DriverPolicyConfig& cfg) {
     DWORD out = 0;
     BOOL ok = DeviceIoControl(hDevice, IOCTL_MINIEDR_SET_POLICY_V2,
                              buf.data(), (DWORD)buf.size(),
+                             nullptr, 0, &out, nullptr);
+    return ok ? true : false;
+}
+
+bool DriverAllowlistAdd(HANDLE hDevice, uint32_t pid) {
+    DWORD out = 0;
+    BOOL ok = DeviceIoControl(hDevice, IOCTL_MINIEDR_ALLOWLIST_ADD,
+                             &pid, sizeof(pid),
+                             nullptr, 0, &out, nullptr);
+    return ok ? true : false;
+}
+
+bool DriverAllowlistRemove(HANDLE hDevice, uint32_t pid) {
+    DWORD out = 0;
+    BOOL ok = DeviceIoControl(hDevice, IOCTL_MINIEDR_ALLOWLIST_REMOVE,
+                             &pid, sizeof(pid),
                              nullptr, 0, &out, nullptr);
     return ok ? true : false;
 }

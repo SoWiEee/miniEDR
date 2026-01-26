@@ -1,5 +1,8 @@
 {
   "enable_enforcement": false,
   "protected_pids": [],
-  "allowed_pids": [4]
+  "allowed_pids": [
+    4
+  ],
+  "strip_instead_of_deny": true
 }

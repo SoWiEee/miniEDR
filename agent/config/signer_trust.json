@@ -1,0 +1,11 @@
+{
+  "allow_microsoft_signed": true,
+  "require_trusted_chain": true,
+  "allow_subject_contains": [
+    "Microsoft"
+  ],
+  "allow_issuer_contains": [
+    "Microsoft",
+    "DigiCert"
+  ]
+}
