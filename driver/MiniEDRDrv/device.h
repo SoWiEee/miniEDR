@@ -15,8 +15,9 @@ typedef struct _DEVICE_CONTEXT {
     // Policy knobs
     BOOLEAN HandleAuditEnabled;
 
-    // Phase 4: enforcement
+    // Phase 4+: enforcement
     BOOLEAN EnforceProtect;
+    BOOLEAN StripInsteadOfDeny;
     WDFSPINLOCK PolicyLock;
     UINT32 ProtectedCount;
     UINT32 AllowedCount;
