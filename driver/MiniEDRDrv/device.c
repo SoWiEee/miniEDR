@@ -65,6 +65,7 @@ NTSTATUS MiniEdrCreateDevice(_Inout_ PWDFDEVICE_INIT DeviceInit, _Out_ WDFDEVICE
     ctx->Dropped = 0;
     ctx->HandleAuditEnabled = TRUE;
     ctx->EnforceProtect = FALSE;
+    ctx->StripInsteadOfDeny = TRUE;
     ctx->ProtectedCount = 0;
     ctx->AllowedCount = 0;
     ctx->ProtectedPids = NULL;
