@@ -1,4 +1,4 @@
-#include "callbacks.h"
+ï»¿#include "callbacks.h"
 #include "device.h"
 #include "../include/miniedr_ioctl.h"
 
@@ -47,50 +47,30 @@ static BOOLEAN IsDangerousProcessAccess(_In_ ACCESS_MASK a)
     return (a & dangerous) != 0;
 }
 
-static OB_PREOP_CALLBACK_STATUS
-MiniEdrPreOp(
-    _In_ PVOID RegistrationContext,
-    _Inout_ POB_PRE_OPERATION_INFORMATION OperationInformation
-)
+static OB_PREOP_CALLBACK_STATUS MiniEdrPreOp(_In_ PVOID RegistrationContext, _Inout_ POB_PRE_OPERATION_INFORMATION OperationInformation)
 {
     UNREFERENCED_PARAMETER(RegistrationContext);
 
-    if (g_device == NULL) {
-        return OB_PREOP_SUCCESS;
-    }
+    if (!g_device) return OB_PREOP_SUCCESS;
 
-    // Optional hardening: ignore kernel handles
-    // KernelHandle bit is part of OB_PRE_OPERATION_INFORMATION
-    if (OperationInformation->KernelHandle) {
-        return OB_PREOP_SUCCESS;
-    }
+    DEVICE_CONTEXT* ctx = DeviceGetContext(g_device);
+    if (!ctx->HandleAuditEnabled) return OB_PREOP_SUCCESS;
 
-    PDEVICE_CONTEXT ctx = DeviceGetContext(g_device);
-    if (!ctx->HandleAuditEnabled) {
-        return OB_PREOP_SUCCESS;
-    }
+    // We only audit process handle operations
+    if (OperationInformation->ObjectType != *PsProcessType) return OB_PREOP_SUCCESS;
 
-    // Only process handle operations
-    if (OperationInformation->ObjectType != *PsProcessType) {
-        return OB_PREOP_SUCCESS;
-    }
-
-    // Target PID
+    ULONG srcPid = (ULONG)(ULONG_PTR)PsGetCurrentProcessId();
     ULONG tgtPid = 0;
+
     PEPROCESS target = (PEPROCESS)OperationInformation->Object;
-    if (target != NULL) {
+    if (target) {
         tgtPid = (ULONG)(ULONG_PTR)PsGetProcessId(target);
     }
 
-    // Source PID (note: callback may run in arbitrary thread context per docs;
-    // this is still the common pattern used for audit/enforcement heuristics)
-    ULONG srcPid = (ULONG)(ULONG_PTR)PsGetCurrentProcessId();
-
-    // Get a pointer to DesiredAccess + record operation type
     ACCESS_MASK* pDesired = NULL;
     ACCESS_MASK original = 0;
     ULONG op = 0;
-
+    ULONG decision = MiniEdrDecision_Allow;
     if (OperationInformation->Operation == OB_OPERATION_HANDLE_CREATE) {
         pDesired = &OperationInformation->Parameters->CreateHandleInformation.DesiredAccess;
         original = OperationInformation->Parameters->CreateHandleInformation.OriginalDesiredAccess;
@@ -105,7 +85,8 @@ MiniEdrPreOp(
         return OB_PREOP_SUCCESS;
     }
 
-    // Optional enforcement: protect selected PIDs from dangerous access
+    // Optional enforcement: protect selected PIDs from dangerous process access unless source is allowlisted.
+    // This is OFF by default and must be enabled via IOCTL_MINIEDR_SET_POLICY_V2.
     BOOLEAN enforce = FALSE;
     BOOLEAN targetProtected = FALSE;
     BOOLEAN srcAllowed = FALSE;
@@ -133,7 +114,7 @@ MiniEdrPreOp(
                 PROCESS_SET_INFORMATION |
                 PROCESS_SET_QUOTA;
 
-            // Option A: remove only dangerous bits (recommended for ¡§least surprise¡¨)
+            // Option A: remove only dangerous bits (recommended for Â¡Â§least surpriseÂ¡Â¨)
             *pDesired &= ~dangerous;
 
             // Option B (stricter): force to zero access
@@ -141,8 +122,8 @@ MiniEdrPreOp(
         }
     }
 
-    // Audit event
-    MINIEDR_EVT_HANDLEACCESS e = { 0 };
+
+    MINIEDR_EVT_HANDLEACCESS e = {0};
     e.H.Type = MiniEdrEvent_HandleAccess;
     e.H.Size = sizeof(e);
     e.H.TimestampQpc = (UINT64)KeQueryPerformanceCounter(NULL).QuadPart;
@@ -150,9 +131,11 @@ MiniEdrPreOp(
     e.TargetPid = tgtPid;
     e.DesiredAccess = (UINT32)(pDesired ? *pDesired : 0);
     e.Operation = op;
+    e.Decision = decision;
+    e.Reserved2 = 0;
 
     MiniEdrRingPush(g_device, &e, sizeof(e));
-    return OB_PREOP_SUCCESS;
+    return OB_PREOP_SUCCESS; // audit only
 }
 
 static VOID MiniEdrProcessNotifyEx(_Inout_ PEPROCESS Process,

@@ -12,6 +12,16 @@
 
 static __forceinline ULONG NextIndex(ULONG idx) { return (idx + 1) % RING_CAPACITY; }
 
+static __forceinline BOOLEAN
+ListContainsU32(_In_opt_ const UINT32* list, _In_ UINT32 count, _In_ UINT32 x)
+{
+    if (list == NULL) return FALSE;
+    for (UINT32 i = 0; i < count; i++) {
+        if (list[i] == x) return TRUE;
+    }
+    return FALSE;
+}
+
 // Ring is stored in the device context as an opaque buffer via WDFMEMORY in Phase 4+.
 // For this MVP we use a static nonpaged array per-driver instance.
 static MINIEDR_EVT_IMAGELOAD g_ring[RING_CAPACITY];
@@ -116,56 +126,124 @@ VOID MiniEdrEvtIoDeviceControl(_In_ WDFQUEUE Queue,
             ctx->HandleAuditEnabled = (in->EnableHandleAudit != 0) ? TRUE : FALSE;
             bytes = 0;
         }
-} else if (IoControlCode == IOCTL_MINIEDR_SET_POLICY_V2) {
-    const MINIEDR_POLICY_V2* in = NULL;
-    status = WdfRequestRetrieveInputBuffer(Request, sizeof(MINIEDR_POLICY_V2), (PVOID*)&in, NULL);
-    if (NT_SUCCESS(status)) {
-        if (in->Version != MINIEDR_IOCTL_VERSION) {
-            status = STATUS_INVALID_PARAMETER;
-        } else {
-            DEVICE_CONTEXT* ctx = DeviceGetContext(device);
-            // validate total size
-            size_t need = sizeof(MINIEDR_POLICY_V2)
-                + (size_t)in->ProtectedPidCount * sizeof(UINT32)
-                + (size_t)in->AllowedPidCount * sizeof(UINT32);
-            if (InputBufferLength < need) {
-                status = STATUS_BUFFER_TOO_SMALL;
+    } else if (IoControlCode == IOCTL_MINIEDR_SET_POLICY_V2) {
+        const MINIEDR_POLICY_V2* in = NULL;
+        status = WdfRequestRetrieveInputBuffer(Request, sizeof(MINIEDR_POLICY_V2), (PVOID*)&in, NULL);
+        if (NT_SUCCESS(status)) {
+            if (in->Version != MINIEDR_IOCTL_VERSION) {
+                status = STATUS_INVALID_PARAMETER;
             } else {
-                const UINT32* pids = (const UINT32*)((const UINT8*)in + sizeof(MINIEDR_POLICY_V2));
-                const UINT32* allow = pids + in->ProtectedPidCount;
-
-                UINT32* newProt = NULL;
-                UINT32* newAllow = NULL;
-
-                if (in->ProtectedPidCount) {
-                    newProt = (UINT32*)ExAllocatePool2(POOL_FLAG_NON_PAGED, in->ProtectedPidCount * sizeof(UINT32), 'rPdM');
-                    if (!newProt) status = STATUS_INSUFFICIENT_RESOURCES;
-                    else RtlCopyMemory(newProt, pids, in->ProtectedPidCount * sizeof(UINT32));
-                }
-                if (NT_SUCCESS(status) && in->AllowedPidCount) {
-                    newAllow = (UINT32*)ExAllocatePool2(POOL_FLAG_NON_PAGED, in->AllowedPidCount * sizeof(UINT32), 'aPdM');
-                    if (!newAllow) status = STATUS_INSUFFICIENT_RESOURCES;
-                    else RtlCopyMemory(newAllow, allow, in->AllowedPidCount * sizeof(UINT32));
-                }
-
-                if (NT_SUCCESS(status)) {
-                    WdfSpinLockAcquire(ctx->PolicyLock);
-                    if (ctx->ProtectedPids) ExFreePoolWithTag(ctx->ProtectedPids, 'rPdM');
-                    if (ctx->AllowedPids) ExFreePoolWithTag(ctx->AllowedPids, 'aPdM');
-                    ctx->ProtectedPids = newProt;
-                    ctx->AllowedPids = newAllow;
-                    ctx->ProtectedCount = in->ProtectedPidCount;
-                    ctx->AllowedCount = in->AllowedPidCount;
-                    ctx->EnforceProtect = (in->Flags & MINIEDR_POLICY_FLAG_ENFORCE_PROTECT) ? TRUE : FALSE;
-                    WdfSpinLockRelease(ctx->PolicyLock);
-                    bytes = 0;
+                DEVICE_CONTEXT* ctx = DeviceGetContext(device);
+                // validate total size
+                size_t need = sizeof(MINIEDR_POLICY_V2)
+                    + (size_t)in->ProtectedPidCount * sizeof(UINT32)
+                    + (size_t)in->AllowedPidCount * sizeof(UINT32);
+                if (InputBufferLength < need) {
+                    status = STATUS_BUFFER_TOO_SMALL;
                 } else {
-                    if (newProt) ExFreePoolWithTag(newProt, 'rPdM');
-                    if (newAllow) ExFreePoolWithTag(newAllow, 'aPdM');
+                    const UINT32* pids = (const UINT32*)((const UINT8*)in + sizeof(MINIEDR_POLICY_V2));
+                    const UINT32* allow = pids + in->ProtectedPidCount;
+
+                    UINT32* newProt = NULL;
+                    UINT32* newAllow = NULL;
+
+                    if (in->ProtectedPidCount) {
+                        newProt = (UINT32*)ExAllocatePool2(POOL_FLAG_NON_PAGED, in->ProtectedPidCount * sizeof(UINT32), 'rPdM');
+                        if (!newProt) status = STATUS_INSUFFICIENT_RESOURCES;
+                        else RtlCopyMemory(newProt, pids, in->ProtectedPidCount * sizeof(UINT32));
+                    }
+                    if (NT_SUCCESS(status) && in->AllowedPidCount) {
+                        newAllow = (UINT32*)ExAllocatePool2(POOL_FLAG_NON_PAGED, in->AllowedPidCount * sizeof(UINT32), 'aPdM');
+                        if (!newAllow) status = STATUS_INSUFFICIENT_RESOURCES;
+                        else RtlCopyMemory(newAllow, allow, in->AllowedPidCount * sizeof(UINT32));
+                    }
+
+                    if (NT_SUCCESS(status)) {
+                        WdfSpinLockAcquire(ctx->PolicyLock);
+                        if (ctx->ProtectedPids) ExFreePoolWithTag(ctx->ProtectedPids, 'rPdM');
+                        if (ctx->AllowedPids) ExFreePoolWithTag(ctx->AllowedPids, 'aPdM');
+                        ctx->ProtectedPids = newProt;
+                        ctx->AllowedPids = newAllow;
+                        ctx->ProtectedCount = in->ProtectedPidCount;
+                        ctx->AllowedCount = in->AllowedPidCount;
+                        ctx->EnforceProtect = (in->Flags & MINIEDR_POLICY_FLAG_ENFORCE_PROTECT) ? TRUE : FALSE;
+                            ctx->StripInsteadOfDeny = (in->Flags & MINIEDR_POLICY_FLAG_STRIP_INSTEAD_OF_DENY) ? TRUE : FALSE;
+                        WdfSpinLockRelease(ctx->PolicyLock);
+                        bytes = 0;
+                    } else {
+                        if (newProt) ExFreePoolWithTag(newProt, 'rPdM');
+                        if (newAllow) ExFreePoolWithTag(newAllow, 'aPdM');
+                    }
                 }
             }
         }
-    }
+    } else if (IoControlCode == IOCTL_MINIEDR_ALLOWLIST_ADD || IoControlCode == IOCTL_MINIEDR_ALLOWLIST_REMOVE) {
+        const UINT32* inPid = NULL;
+        status = WdfRequestRetrieveInputBuffer(Request, sizeof(UINT32), (PVOID*)&inPid, NULL);
+        if (NT_SUCCESS(status)) {
+            UINT32 pid = *inPid;
+            DEVICE_CONTEXT* ctx = DeviceGetContext(device);
+
+            WdfSpinLockAcquire(ctx->PolicyLock);
+
+            UINT32 count = ctx->AllowedCount;
+            UINT32* list = ctx->AllowedPids;
+
+            if (IoControlCode == IOCTL_MINIEDR_ALLOWLIST_ADD) {
+                if (!ListContainsU32(list, count, pid)) {
+                    UINT32* nl = (UINT32*)ExAllocatePool2(POOL_FLAG_NON_PAGED, (SIZE_T)(count + 1) * sizeof(UINT32), 'aPdM');
+                    if (nl == NULL) {
+                        status = STATUS_INSUFFICIENT_RESOURCES;
+                    }
+                    else {
+                        if (list != NULL && count != 0) {
+                            RtlCopyMemory(nl, list, (SIZE_T)count * sizeof(UINT32));
+                        }
+                        nl[count] = pid;
+
+                        if (list != NULL) {
+                            ExFreePoolWithTag(list, 'aPdM');
+                        }
+                        ctx->AllowedPids = nl;
+                        ctx->AllowedCount = count + 1;
+                    }
+                }
+            }
+            else { // IOCTL_MINIEDR_ALLOWLIST_REMOVE
+                if (ListContainsU32(list, count, pid)) {
+                    if (count == 1) {
+                        if (list != NULL) {
+                            ExFreePoolWithTag(list, 'aPdM');
+                        }
+                        ctx->AllowedPids = NULL;
+                        ctx->AllowedCount = 0;
+                    }
+                    else {
+                        UINT32* nl = (UINT32*)ExAllocatePool2(POOL_FLAG_NON_PAGED,(SIZE_T)(count - 1) * sizeof(UINT32),'aPdM');
+                        if (nl == NULL) {
+                            status = STATUS_INSUFFICIENT_RESOURCES;
+                        }
+                        else {
+                            UINT32 j = 0;
+                            if (list != NULL) {
+                                for (UINT32 i = 0; i < count; i++) {
+                                    if (list[i] != pid) {
+                                        nl[j++] = list[i];
+                                    }
+                                }
+                            }
+                            if (list != NULL) {
+                                ExFreePoolWithTag(list, 'aPdM');
+                            }
+                            ctx->AllowedPids = nl;
+                            ctx->AllowedCount = count - 1;
+                        }
+                    }
+                }
+            }
+            WdfSpinLockRelease(ctx->PolicyLock);
+            bytes = 0;
+        }
     } else {
         status = STATUS_INVALID_DEVICE_REQUEST;
     }
