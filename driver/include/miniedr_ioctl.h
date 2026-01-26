@@ -40,12 +40,20 @@ typedef struct _MINIEDR_EVT_IMAGELOAD {
     wchar_t  ImagePath[260]; // FullImageName (truncated)
 } MINIEDR_EVT_IMAGELOAD;
 
+typedef enum _MINIEDR_HANDLE_DECISION {
+    MiniEdrDecision_Allow = 0,
+    MiniEdrDecision_Stripped = 1,
+    MiniEdrDecision_Denied = 2
+} MINIEDR_HANDLE_DECISION;
+
 typedef struct _MINIEDR_EVT_HANDLEACCESS {
     MINIEDR_EVENT_HEADER H;
     UINT32 SourcePid;
     UINT32 TargetPid;
     UINT32 DesiredAccess;
     UINT32 Operation; // 1=CreateHandle,2=DuplicateHandle (best-effort)
+    UINT32 Decision;  // MINIEDR_HANDLE_DECISION
+    UINT32 Reserved2;
 } MINIEDR_EVT_HANDLEACCESS;
 
 #pragma pack(pop)
@@ -57,6 +65,8 @@ typedef struct _MINIEDR_EVT_HANDLEACCESS {
 #define IOCTL_MINIEDR_GET_EVENTS  CTL_CODE(FILE_DEVICE_UNKNOWN, MINIEDR_IOCTL_BASE + 1, METHOD_BUFFERED, FILE_READ_ACCESS)
 #define IOCTL_MINIEDR_SET_POLICY  CTL_CODE(FILE_DEVICE_UNKNOWN, MINIEDR_IOCTL_BASE + 2, METHOD_BUFFERED, FILE_WRITE_ACCESS)
 #define IOCTL_MINIEDR_SET_POLICY_V2 CTL_CODE(FILE_DEVICE_UNKNOWN, MINIEDR_IOCTL_BASE + 3, METHOD_BUFFERED, FILE_WRITE_ACCESS)
+#define IOCTL_MINIEDR_ALLOWLIST_ADD  CTL_CODE(FILE_DEVICE_UNKNOWN, MINIEDR_IOCTL_BASE + 4, METHOD_BUFFERED, FILE_WRITE_ACCESS)
+#define IOCTL_MINIEDR_ALLOWLIST_REMOVE CTL_CODE(FILE_DEVICE_UNKNOWN, MINIEDR_IOCTL_BASE + 5, METHOD_BUFFERED, FILE_WRITE_ACCESS)
 
 // GET_VERSION output
 typedef struct _MINIEDR_VERSION_INFO {
@@ -72,6 +82,7 @@ typedef struct _MINIEDR_POLICY {
 
 // Policy v2 (variable length PID lists)
 #define MINIEDR_POLICY_FLAG_ENFORCE_PROTECT 0x00000001u
+#define MINIEDR_POLICY_FLAG_STRIP_INSTEAD_OF_DENY 0x00000002u
 
 #pragma pack(push, 1)
 typedef struct _MINIEDR_POLICY_V2 {
@@ -80,7 +91,7 @@ typedef struct _MINIEDR_POLICY_V2 {
     UINT32 ProtectedPidCount;
     UINT32 AllowedPidCount;
     // Followed by arrays:
-    // uint32_t ProtectedPids[ProtectedPidCount];
-    // uint32_t AllowedPids[AllowedPidCount];
+    // UINT32 ProtectedPids[ProtectedPidCount];
+    // UINT32 AllowedPids[AllowedPidCount];
 } MINIEDR_POLICY_V2;
 #pragma pack(pop)
