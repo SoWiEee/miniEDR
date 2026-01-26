@@ -1,3 +1,7 @@
+# Introduction
+
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/SoWiEee/miniEDR)
+
 # MiniEDR (Phase 2) — Sysmon + ETW → Rules + Correlation → Alerts
 
 MiniEDR is a C++ Windows EDR starter project designed for learners who are new to Windows telemetry and detection engineering.
