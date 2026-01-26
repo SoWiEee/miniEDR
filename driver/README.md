@@ -45,3 +45,12 @@ Key IOCTLs:
   (e.g., query full command line, signer, hashes) after receiving a kernel event.
 - Current Ob callback is audit-only (no blocking). Policy enforcement can be added later with
   allowlists and careful compatibility testing.
+
+
+## Phase 5 additions
+
+- HandleAccess telemetry includes `Decision` (Allow/Stripped/Denied).
+- Enforcement supports **strip** mode (default) or **deny** mode via policy flags.
+- Incremental allowlist update IOCTLs:
+  - `IOCTL_MINIEDR_ALLOWLIST_ADD`
+  - `IOCTL_MINIEDR_ALLOWLIST_REMOVE`

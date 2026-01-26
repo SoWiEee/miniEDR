@@ -302,3 +302,24 @@ How it works:
   the driver returns `STATUS_ACCESS_DENIED` for that specific handle operation.
 
 Start with enforcement disabled and validate stability on a VM. Build a conservative allowlist before enabling.
+
+
+## Phase 5: Signer-based dynamic allowlist (driver enforcement)
+
+Phase 5 upgrades enforcement from a static PID allowlist to a **signer-based dynamic allowlist**.
+
+Design:
+- Kernel driver enforces protected targets via `ObRegisterCallbacks`.
+- When a non-allowlisted source requests dangerous access to a protected PID, the driver either:
+  - **strips** dangerous rights (default), or
+  - **denies** the handle open (optional; riskier).
+- The driver emits a `HandleAccess` event with a `Decision` field (Allow/Stripped/Denied).
+- User-mode receives the event, enriches the source process (path, signer, hash), and if the signer is trusted by policy,
+  it **allowlists the PID dynamically** via `IOCTL_MINIEDR_ALLOWLIST_ADD`.
+
+Configuration:
+- `agent/config/driver_policy.json`
+  - `enable_enforcement`: enable protect mode
+  - `strip_instead_of_deny`: prefer stripping rights over denying
+- `agent/config/signer_trust.json`
+  - signer trust policy used to allowlist tools dynamically
