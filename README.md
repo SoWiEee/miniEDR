@@ -327,3 +327,52 @@ Configuration:
   - `strip_instead_of_deny`: prefer stripping rights over denying
 - `agent/config/signer_trust.json`
   - signer trust policy used to allowlist tools dynamically
+
+
+## Phase 6: Optional user-mode API call telemetry (Detours)
+
+MiniEDR now includes an **optional Detours-based Hook DLL (x64 only)** for research-grade API telemetry. It is **disabled by default** because user-mode hooking is fragile and can break compatibility.
+
+Design goals:
+- On-demand injection only (triggered by high/critical alerts) to keep overhead low.
+- Hook DLL writes newline-delimited JSON to a named pipe (`\\.\pipe\MiniEDR.ApiHook`).
+- Agent receives events via `ApiHookCollector` and normalizes them into `EventType::ApiCall`.
+
+Build Detours + Hook DLL:
+1) Clone Microsoft Detours (MIT): build x64 to produce `detours.h` and `detours.lib`. citeturn0search16turn0search4
+2) Configure CMake (example):
+   - `-DMINIEDR_BUILD_APIOOK_DLL=ON -DDETOURS_ROOT=<path-to-detours> -DDETOURS_LIB=<path-to-detours.lib>`
+3) Copy the built DLL to: `tools\bin\MiniEDR.ApiHookDll64.dll`
+
+Detours API references used:
+- Hook installation via transactions: `DetourTransactionBegin`, `DetourAttach`, `DetourTransactionCommit`. citeturn0search0turn0search8
+- Process creation with injected DLLs (Detours sample `withdll`): `DetourCreateProcessWithDlls`. citeturn0search1turn0search5
+
+Enable hooking:
+- Edit `agent/config/hooking.json` and set `"enable_hooking": true`.
+- Hook injection is triggered for **High/Critical** findings via `ApiHookInjectResponder`.
+
+
+## YARA: rule sources and safe usage
+
+MiniEDR can run YARA scans on-demand using `tools\bin\yara64.exe` against an alerted PID.
+
+Recommended open rule sources (start conservative):
+- Neo23x0 / signature-base (rules used by LOKI/THOR scanners): citeturn0search3turn0search18
+- InQuest awesome-yara (curated list of high-quality rule sets/tools): citeturn0search2
+
+Operational tips:
+- Treat public YARA rules as *untrusted input*; review + tune to your environment.
+- Expect false positives. Use your signer-based allowlist and evidence enrichment (hash/signer/path) to triage.
+
+
+## Sandbox integration (concept)
+
+MiniEDR does not ship a full sandbox, but the intended design is “submit suspicious artifacts to an isolated analysis system” and ingest the report back into Evidence.
+
+Open-source sandboxes you can integrate:
+- Cuckoo Sandbox: open-source automated malware analysis system. citeturn1search15turn1search2
+- CAPE Sandbox: actively developed open-source malware sandbox derived from Cuckoo. citeturn1search3turn1search6turn1search12
+
+Common EDR pattern:
+- Endpoint flags a file/process → uploads sample to sandbox → receives behavioral report → correlates with host telemetry to confirm severity.
