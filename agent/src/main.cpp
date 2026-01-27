@@ -1,6 +1,7 @@
 #include "collectors/sysmon_collector.h"
 #include "collectors/etw_kernel_collector.h"
 #include "collectors/driver_collector.h"
+#include "collectors/api_hook_collector.h"
 
 #include "pipeline/normalizer.h"
 #include "detection/rule_engine.h"
@@ -65,6 +66,9 @@ int wmain(int argc, wchar_t** argv) {
     ResponseConfig resp_cfg;
     resp_cfg.enable_response = false;
     resp_cfg.auto_terminate_on_critical = false;
+#ifdef _WIN32
+    resp_cfg.hooking = LoadHookingConfig(L"agent\\config\\hooking.json");
+#endif
     ResponseManager resp_mgr(resp_cfg);
 
     auto EmitFindings = [&](const std::vector<Finding>& findings) {
@@ -124,10 +128,23 @@ int wmain(int argc, wchar_t** argv) {
         std::wcout << L"[Main] KMDF driver collector enabled.\n";
     }
 
-    while (g_running) {
+    
+    std::unique_ptr<ApiHookCollector> apihook;
+#ifdef _WIN32
+    if (resp_cfg.hooking.enable_hooking) {
+        apihook = std::make_unique<ApiHookCollector>();
+        apihook->Start([&](const CanonicalEvent& ev) { HandleEvent(ev); });
+        std::wcout << L"[Main] ApiHook collector enabled (named pipe).\n";
+    } else {
+        std::wcout << L"[Main] ApiHook collector disabled.\n";
+    }
+#endif
+
+while (g_running) {
         Sleep(200);
     }
 
+    if (apihook) apihook->Stop();
     if (sysmon) sysmon->Stop();
     if (etw) etw->Stop();
 

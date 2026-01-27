@@ -1,6 +1,8 @@
 #pragma once
 #include "response/responder_iface.h"
 #include <memory>
+#include "hooking/apihook_injector.h"
+
 #include <vector>
 
 namespace miniedr {
@@ -8,6 +10,7 @@ namespace miniedr {
 struct ResponseConfig {
     bool enable_response = false;
     bool auto_terminate_on_critical = false;
+    HookingConfig hooking{};
 };
 
 class ResponseManager {

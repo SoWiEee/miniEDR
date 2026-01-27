@@ -8,6 +8,7 @@
 namespace miniedr {
 
 enum class EventType {
+    ApiCall,
     Unknown = 0,
 
     // Process lifecycle
