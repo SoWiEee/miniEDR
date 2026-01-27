@@ -1,0 +1,5 @@
+{
+  "enable_hooking": false,
+  "inject_on_high": true,
+  "hook_dll_path": "tools\\bin\\MiniEDR.ApiHookDll64.dll"
+}
