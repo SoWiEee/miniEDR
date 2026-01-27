@@ -14,3 +14,7 @@ else()
 endif()
 
 add_subdirectory(agent)
+
+
+# Optional Detours-based hook DLL (Phase 6)
+add_subdirectory(hooks)
