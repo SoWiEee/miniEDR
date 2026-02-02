@@ -62,6 +62,24 @@ cmake --build build --config Release
 
 > ETW collector is optional and can be disabled via `--no-etw` flag.
 
+### Detours (user-mode API call)
+
+- On-demand injection only (triggered by high/critical alerts) to keep overhead low.
+- Hook DLL writes newline-delimited JSON to a named pipe (`\\.\pipe\MiniEDR.ApiHook`).
+- Agent receives events via `ApiHookCollector` and normalizes them into `EventType::ApiCall`.
+- Hooked APIs:
+    - `CreateRemoteThread`
+    - `WriteProcessMemory`
+    - `VirtualAllocEx`
+    - `OpenProcess` (high-rights only)
+    - `NtCreateThreadEx`
+
+Enable hooking:
+- Edit `agent/config/hooking.json` and set `"enable_hooking": true`.
+- Hook injection is triggered for **High/Critical** findings via `ApiHookInjectResponder`.
+
+> You should build the hook DLL to `tools\bin\MiniEDR.ApiHookDll64.dll`.
+
 ### Kernel driver collector
 
 The driver registers callbacks:
@@ -153,33 +171,8 @@ You can extend this with: suspend process, isolate host/network, quarantine file
 - `tools/sysmon/` Sysmon configuration
 - `rules/` default JSON ruleset
 
-## Phase 5: Signer-based dynamic allowlist (driver enforcement)
-
-
-
-
 ## Phase 6: Optional user-mode API call telemetry (Detours)
 
-MiniEDR now includes an **optional Detours-based Hook DLL (x64 only)** for research-grade API telemetry. It is **disabled by default** because user-mode hooking is fragile and can break compatibility.
-
-Design goals:
-- On-demand injection only (triggered by high/critical alerts) to keep overhead low.
-- Hook DLL writes newline-delimited JSON to a named pipe (`\\.\pipe\MiniEDR.ApiHook`).
-- Agent receives events via `ApiHookCollector` and normalizes them into `EventType::ApiCall`.
-
-Build Detours + Hook DLL:
-1) Clone Microsoft Detours (MIT): build x64 to produce `detours.h` and `detours.lib`. citeturn0search16turn0search4
-2) Configure CMake (example):
-   - `-DMINIEDR_BUILD_APIOOK_DLL=ON -DDETOURS_ROOT=<path-to-detours> -DDETOURS_LIB=<path-to-detours.lib>`
-3) Copy the built DLL to: `tools\bin\MiniEDR.ApiHookDll64.dll`
-
-Detours API references used:
-- Hook installation via transactions: `DetourTransactionBegin`, `DetourAttach`, `DetourTransactionCommit`. citeturn0search0turn0search8
-- Process creation with injected DLLs (Detours sample `withdll`): `DetourCreateProcessWithDlls`. citeturn0search1turn0search5
-
-Enable hooking:
-- Edit `agent/config/hooking.json` and set `"enable_hooking": true`.
-- Hook injection is triggered for **High/Critical** findings via `ApiHookInjectResponder`.
 
 
 ## YARA: rule sources and safe usage
