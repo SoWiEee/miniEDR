@@ -89,80 +89,19 @@ cmake --build build --config Release
 
 > You can edit the JSON rules without rebuilding.
 
-## Repository layout
+## 4. Scanners (on-demand)
 
-- `agent/` user-mode agent code
-  - `collectors/` Sysmon + ETW collectors
-  - `pipeline/` canonical event schema + normalizer
-  - `detection/` rule engine + correlator
-  - `output/` alert sinks
-  - `utils/` small utilities (encoding, JSON parser, path helpers)
-- `tools/sysmon/` Sysmon configuration
-- `rules/` default JSON ruleset
-
-## Phase 3: On-demand deep scans (pe-sieve / hollows_hunter)
-
-Phase 3 adds optional, on-demand deep scanning for **already-alerted** PIDs. This is the core performance idea:
-MiniEDR only pays the cost of memory scanning when detection rules/correlation have already raised suspicion.
-
-Trigger logic (configurable):
-- Severity is **High** or **Critical**, or
-- `rule_id` contains a substring listed in `agent/config/scanners.json` → `scan_rule_ids`
-
-Adapters included:
-- **PE-sieve** (single PID scan via `/pid`)
-- **HollowsHunter** (PID-targeted scan via `/pid` plus `/dir` + `/uniqd`)
-
-Outputs:
+- On-demand deep scans for already-alerted PIDs
+- Config: `agent\config\scanners.json`
+- Adapters for:
+    - PE-sieve (single PID scan)
+    - HollowsHunter (PID + directory + unique ID scan)
+    - YARA (PID scan via CLI), bring your own rules at `rules\yara\`
 - Each scan creates a unique folder under `scan_outputs/` by default.
-- MiniEDR reads JSON reports (when present) and marks a scan `suspicious=true` using a lightweight heuristic:
-  `modified.total > 0` (from the report).
 
-### Setup
+> You should Download the latest releases of [PE-sieve](https://github.com/hasherezade/pe-sieve), [HollowsHunter](https://github.com/hasherezade/hollows_hunter), [Yara](https://github.com/VirusTotal/yara) and put the executables into `tools/bin/`.
 
-1) Download the latest releases of PE-sieve and/or HollowsHunter and put the executables into `tools/bin/`:
-- `tools\bin\pe-sieve64.exe`
-- `tools\bin\hollows_hunter64.exe`
-
-2) Verify configuration:
-- `agent\config\scanners.json`
-
-3) Run MiniEDR (Administrator recommended). When a scan triggers, console output shows an "On-demand scans" block
-and `alerts.jsonl` includes a `scans` array.
-
-See also: `docs/scanners.md`.
-
-
-## Phase 3 (enhanced): Defense-in-depth add-ons
-
-This update focuses on making the Phase 3 feature-set more complete, while keeping the project approachable.
-
-### Deep post-event scanners (on-demand)
-
-MiniEDR runs deep scanners **only after an alert** is generated (performance-first design). Adapters included:
-- PE-sieve adapter (per-PID scan, reads `scan_report.json` when available)
-- HollowsHunter adapter (per-PID scan, searches for JSON reports recursively)
-- YARA adapter (runs `yara` CLI to scan a PID on-demand; bring your own rules)
-
-Configuration:
-- `agent/config/scanners.json` controls:
-  - which severities/rule IDs trigger scans
-  - tool paths (not redistributed): `tools\bin\pe-sieve64.exe`, `tools\bin\hollows_hunter64.exe`, `tools\bin\yara64.exe`
-  - YARA rules folder (default: `rules\yara\`)
-
-Operational note: YARA supports scanning a running process by using PID as the TARGET argument in the CLI. citeturn0search1turn0search9turn0search19
-
-### Full XML parsing and stronger normalization
-
-Sysmon events are rendered as XML via Windows Event Log APIs. Earlier phases used pragmatic string/regex extraction.
-Phase 3 now prefers **XmlLite (IXmlReader)** parsing to extract:
-- `EventID`
-- `TimeCreated/@SystemTime`
-- all `<Data Name="...">...</Data>` fields
-
-This reduces parser fragility and is a stepping stone toward stronger schema validation. citeturn0search2turn0search10
-
-### Response actions (optional; disabled by default)
+## 5. Response
 
 A response manager scaffold is added (currently off by default) to keep the core detection path safe and predictable.
 Implemented example action:
@@ -173,21 +112,16 @@ Files:
 
 You can extend this with: suspend process, isolate host/network, quarantine file, block hash, etc.
 
-### Hooking and sandboxing (documented boundaries)
+## Repository layout
 
-Hooking and sandboxing are complex and can be risky if enabled by default. In Phase 3 we:
-- define intended module boundaries
-- keep them opt-in / future work
-
-See:
-- `agent/src/hooking/README.md`
-- `agent/src/sandbox/README.md`
-
-### Kernel driver scaffolding (optional; not built in CMake)
-
-Kernel callbacks (ObRegisterCallbacks, PsSetCreateProcessNotifyRoutineEx, etc.) are best implemented in a driver and require WDK.
-Phase 3 adds a documentation scaffold under `driver/` with guidance and references to official samples. citeturn0search7turn0search3
-
+- `agent/` user-mode agent code
+  - `collectors/` Sysmon + ETW collectors
+  - `pipeline/` canonical event schema + normalizer
+  - `detection/` rule engine + correlator
+  - `output/` alert sinks
+  - `utils/` small utilities (encoding, JSON parser, path helpers)
+- `tools/sysmon/` Sysmon configuration
+- `rules/` default JSON ruleset
 
 ## Phase 4: KMDF kernel driver telemetry (IOCTL)
 
