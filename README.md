@@ -33,6 +33,17 @@ cmake --build build --config Release
 
 # System Design
 
+## Repository layout
+
+- `agent/` user-mode agent code
+  - `collectors/` Sysmon + ETW collectors
+  - `pipeline/` canonical event schema + normalizer
+  - `detection/` rule engine + correlator
+  - `output/` alert sinks
+  - `utils/` small utilities (encoding, JSON parser, path helpers)
+- `tools/sysmon/` Sysmon configuration
+- `rules/` default JSON ruleset
+
 ## 1. Telemetry (user mode)
 
 ### Sysmon collector
@@ -158,43 +169,20 @@ Implemented example action:
 Files:
 - `agent/src/response/*`
 
-You can extend this with: suspend process, isolate host/network, quarantine file, block hash, etc.
+> You can extend this with: suspend process, isolate host/network, quarantine file, block hash, etc.
 
-## Repository layout
+# Future Work & Integration Ideas
 
-- `agent/` user-mode agent code
-  - `collectors/` Sysmon + ETW collectors
-  - `pipeline/` canonical event schema + normalizer
-  - `detection/` rule engine + correlator
-  - `output/` alert sinks
-  - `utils/` small utilities (encoding, JSON parser, path helpers)
-- `tools/sysmon/` Sysmon configuration
-- `rules/` default JSON ruleset
+## YARA: add rule sources
 
-## Phase 6: Optional user-mode API call telemetry (Detours)
+- [Neo23x0/signature-base](https://github.com/Neo23x0/signature-base)
+- [InQuest/awesome-yara](https://github.com/InQuest/awesome-yara)
 
+## Sandbox integration
 
+Iintended design is “submit suspicious artifacts to an isolated analysis system” and ingest the report back into Evidence.
 
-## YARA: rule sources and safe usage
-
-MiniEDR can run YARA scans on-demand using `tools\bin\yara64.exe` against an alerted PID.
-
-Recommended open rule sources (start conservative):
-- Neo23x0 / signature-base (rules used by LOKI/THOR scanners): citeturn0search3turn0search18
-- InQuest awesome-yara (curated list of high-quality rule sets/tools): citeturn0search2
-
-Operational tips:
-- Treat public YARA rules as *untrusted input*; review + tune to your environment.
-- Expect false positives. Use your signer-based allowlist and evidence enrichment (hash/signer/path) to triage.
-
-
-## Sandbox integration (concept)
-
-MiniEDR does not ship a full sandbox, but the intended design is “submit suspicious artifacts to an isolated analysis system” and ingest the report back into Evidence.
-
-Open-source sandboxes you can integrate:
-- Cuckoo Sandbox: open-source automated malware analysis system. citeturn1search15turn1search2
-- CAPE Sandbox: actively developed open-source malware sandbox derived from Cuckoo. citeturn1search3turn1search6turn1search12
+Will integrate [CAPE Sandbox](https://github.com/kevoreilly/CAPEv2)
 
 Common EDR pattern:
 - Endpoint flags a file/process → uploads sample to sandbox → receives behavioral report → correlates with host telemetry to confirm severity.
