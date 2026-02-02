@@ -17,16 +17,17 @@ This is still an educational project. The goal is clarity and extensibility, not
 
 ## Build & Run
 
-1. From a Developer PowerShell for VS:
-    - `cmake -S . -B build -G "Visual Studio 17 2022" -A x64`
-    - `cmake --build build --config Release`
-    - Binary output: `build\bin\Release\miniedr.exe`
-2. Run MiniEDR (Administrator Recommended):
+1. From a Developer PowerShell for VS
+```bash
+cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+cmake --build build --config Release
+```
+2. Run MiniEDR (Administrator Recommended)
     - `build\bin\Release\miniedr.exe`
     - Optional flags:
         - `--no-sysmon` -> Disable Sysmon collector
         - `--no-etw`    -> Disable ETW kernel collector
-3. Outputs:
+3. Outputs
     - Console alerts
     - `alerts.jsonl` in the current working directory
 
