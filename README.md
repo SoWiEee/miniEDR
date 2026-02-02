@@ -62,6 +62,36 @@ cmake --build build --config Release
 
 > ETW collector is optional and can be disabled via `--no-etw` flag.
 
+### Kernel driver collector
+
+The driver registers callbacks:
+- Process create/exit: `PsSetCreateProcessNotifyRoutineEx`
+- Image load: `PsSetLoadImageNotifyRoutine`
+- Process handle audit: `ObRegisterCallbacks`
+
+Kernel events are intentionally compact. After receiving a kernel event, the agent performs **best-effort enrichment**:
+- Full image path (`QueryFullProcessImageName`)
+- Command line (PEB read via `NtQueryInformationProcess` + `ReadProcessMemory`)
+- User (`OpenProcessToken` + `LookupAccountSid`)
+- Image hash (SHA-256)
+- Authenticode signature verification and signer subject/issuer (best-effort)
+
+Upgrades enforcement from a static PID allowlist to a **signer-based dynamic allowlist**.
+- Kernel driver enforces protected targets via `ObRegisterCallbacks`.
+- When a non-allowlisted source requests dangerous access to a protected PID, the driver either:
+    - **strips** dangerous rights (default), or
+    - **denies** the handle open (optional; riskier).
+- The driver emits a `HandleAccess` event with a `Decision` field (Allow/Stripped/Denied).
+- User-mode receives the event, enriches the source process (path, signer, hash), and if the signer is trusted by policy,
+  it **allowlists the PID dynamically** via `IOCTL_MINIEDR_ALLOWLIST_ADD`.
+
+Configuration:
+- `agent/config/driver_policy.json`
+    - `enable_enforcement`: enable protect mode
+    - `strip_instead_of_deny`: prefer stripping rights over denying
+- `agent/config/signer_trust.json`
+    - signer trust policy used to allowlist tools dynamically
+
 ## 2. Detection
 
 - Data-driven JSON ruleset (`rules/default_rules.json`)
@@ -123,98 +153,9 @@ You can extend this with: suspend process, isolate host/network, quarantine file
 - `tools/sysmon/` Sysmon configuration
 - `rules/` default JSON ruleset
 
-## Phase 4: KMDF kernel driver telemetry (IOCTL)
-
-Phase 4 adds a real **WDK/KMDF** kernel driver project that streams kernel telemetry events to user-mode via **IOCTL**.
-This integrates with the existing architecture by introducing an additional collector (`DriverCollector`) that feeds
-kernel events into the same Normalize/Rules/Correlator pipeline.
-
-### What the driver provides (MVP)
-
-The driver (`driver/MiniEDRDrv`) registers callbacks:
-- Process create/exit: `PsSetCreateProcessNotifyRoutineEx`
-- Image load: `PsSetLoadImageNotifyRoutine`
-- Process handle audit: `ObRegisterCallbacks` (audit-only; no blocking in this milestone)
-
-The driver stores events in a fixed-size nonpaged ring buffer and user-mode pulls events using:
-- `DeviceIoControl(IOCTL_MINIEDR_GET_EVENTS)` on `\\.\MiniEDRDrv`
-
-Shared IOCTL definitions:
-- `driver/include/miniedr_ioctl.h`
-
-### Build the driver
-
-Prerequisites:
-- Visual Studio 2022
-- Windows Driver Kit (WDK) for Windows 10/11
-- A test environment (VM recommended)
-
-Open and build:
-- `driver/MiniEDRDrv/MiniEDRDrv.vcxproj` (x64 Debug/Release)
-
-### Install and run
-
-The repo ships a minimal `MiniEDRDrv.inf` for test setups. Driver signing is enforced on modern Windows;
-use appropriate developer/test signing methods in a VM. Do not deploy unsigned test drivers on production systems.
-
-Once installed and started, the MiniEDR user-mode agent will automatically attempt to connect to `\\.\MiniEDRDrv`.
-If the driver is unavailable, the agent continues without kernel telemetry (fail-open).
-
-### Extending beyond MVP
-
-Recommended next increments:
-- Convert QPC timestamps to wall time in user-mode for consistent timelines
-- Add optional enforcement policy (deny suspicious handle opens) with careful allowlists
-- Add per-event variable payloads and schema versioning
-- Add an IOCTL to request driver-side enrichments (e.g., image path from kernel cache)
-
-
-### Phase 4+: Kernel telemetry enrichment (user-mode)
-
-Kernel events are intentionally compact. After receiving a kernel event, the agent performs **best-effort enrichment**:
-- Full image path (`QueryFullProcessImageName`)
-- Command line (PEB read via `NtQueryInformationProcess` + `ReadProcessMemory`)
-- User (`OpenProcessToken` + `LookupAccountSid`)
-- Image hash (SHA-256)
-- Authenticode signature verification and signer subject/issuer (best-effort)
-
-These fields are stored into `CanonicalEvent.proc` / `CanonicalEvent.target` (`ProcessInfo`) for correlation and triage.
-See: `agent/src/enrich/process_enricher.*`.
-
-
-### Phase 4+: Optional enforcement policy (deny process access)
-
-The KMDF driver can optionally **deny dangerous process-handle operations** against protected PIDs.
-This is implemented in the `ObRegisterCallbacks` pre-operation callback.
-
-How it works:
-- The user-mode agent pushes a policy to the driver at startup (`agent/config/driver_policy.json`).
-- The agent automatically adds its own PID to `protected_pids` and `allowed_pids`.
-- If `enable_enforcement=true`, and a non-allowlisted source requests dangerous access to a protected PID,
-  the driver returns `STATUS_ACCESS_DENIED` for that specific handle operation.
-
-Start with enforcement disabled and validate stability on a VM. Build a conservative allowlist before enabling.
-
-
 ## Phase 5: Signer-based dynamic allowlist (driver enforcement)
 
-Phase 5 upgrades enforcement from a static PID allowlist to a **signer-based dynamic allowlist**.
 
-Design:
-- Kernel driver enforces protected targets via `ObRegisterCallbacks`.
-- When a non-allowlisted source requests dangerous access to a protected PID, the driver either:
-  - **strips** dangerous rights (default), or
-  - **denies** the handle open (optional; riskier).
-- The driver emits a `HandleAccess` event with a `Decision` field (Allow/Stripped/Denied).
-- User-mode receives the event, enriches the source process (path, signer, hash), and if the signer is trusted by policy,
-  it **allowlists the PID dynamically** via `IOCTL_MINIEDR_ALLOWLIST_ADD`.
-
-Configuration:
-- `agent/config/driver_policy.json`
-  - `enable_enforcement`: enable protect mode
-  - `strip_instead_of_deny`: prefer stripping rights over denying
-- `agent/config/signer_trust.json`
-  - signer trust policy used to allowlist tools dynamically
 
 
 ## Phase 6: Optional user-mode API call telemetry (Detours)
