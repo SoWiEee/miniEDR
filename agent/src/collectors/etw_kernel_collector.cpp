@@ -45,7 +45,7 @@ bool ContainsCaseInsensitive(const std::wstring& haystack, const std::wstring& n
 }
 
 template <typename T>
-std::optional<T> TryParse(const krabs::parser& parser, const wchar_t* name) {
+std::optional<T> TryParse(const krabs::parser& parser, const char* name) {
     try {
         return parser.parse<T>(name);
     } catch (const std::exception&) {
@@ -112,16 +112,16 @@ void EtwKernelCollector::Run() {
         ev.source = L"etw";
         ev.source_eid = record.EventHeader.EventDescriptor.Opcode;
 
-        if (auto pid = TryParse<uint32_t>(parser, L"ProcessId")) {
+        if (auto pid = TryParse<uint32_t>(parser, "ProcessId")) {
             ev.proc.pid = *pid;
         }
-        if (auto ppid = TryParse<uint32_t>(parser, L"ParentId")) {
+        if (auto ppid = TryParse<uint32_t>(parser, "ParentId")) {
             ev.proc.ppid = *ppid;
         }
-        if (auto image = TryParse<std::wstring>(parser, L"ImageFileName")) {
+        if (auto image = TryParse<std::wstring>(parser, "ImageFileName")) {
             ev.proc.image = *image;
         }
-        if (auto cmd = TryParse<std::wstring>(parser, L"CommandLine")) {
+        if (auto cmd = TryParse<std::wstring>(parser, "CommandLine")) {
             ev.proc.command_line = *cmd;
         }
 
@@ -142,14 +142,14 @@ void EtwKernelCollector::Run() {
         ev.source = L"etw";
         ev.source_eid = record.EventHeader.EventDescriptor.Opcode;
 
-        if (auto pid = TryParse<uint32_t>(parser, L"ProcessId")) {
+        if (auto pid = TryParse<uint32_t>(parser, "ProcessId")) {
             ev.proc.pid = *pid;
         }
 
         std::wstring image_loaded;
-        if (auto image = TryParse<std::wstring>(parser, L"FileName")) {
+        if (auto image = TryParse<std::wstring>(parser, "FileName")) {
             image_loaded = *image;
-        } else if (auto image = TryParse<std::wstring>(parser, L"ImageFileName")) {
+        } else if (auto image = TryParse<std::wstring>(parser, "ImageFileName")) {
             image_loaded = *image;
         }
         if (!image_loaded.empty()) {
@@ -176,22 +176,22 @@ void EtwKernelCollector::Run() {
         ev.source = L"etw";
         ev.source_eid = record.EventHeader.EventDescriptor.Opcode;
 
-        if (auto pid = TryParse<uint32_t>(parser, L"pid")) {
+        if (auto pid = TryParse<uint32_t>(parser, "pid")) {
             ev.proc.pid = *pid;
-        } else if (auto pid_alt = TryParse<uint32_t>(parser, L"ProcessId")) {
+        } else if (auto pid_alt = TryParse<uint32_t>(parser, "ProcessId")) {
             ev.proc.pid = *pid_alt;
         }
 
-        if (auto saddr = TryParse<uint32_t>(parser, L"saddr")) {
+        if (auto saddr = TryParse<uint32_t>(parser, "saddr")) {
             ev.fields[L"SourceIp"] = Ipv4ToWString(*saddr);
         }
-        if (auto daddr = TryParse<uint32_t>(parser, L"daddr")) {
+        if (auto daddr = TryParse<uint32_t>(parser, "daddr")) {
             ev.fields[L"DestinationIp"] = Ipv4ToWString(*daddr);
         }
-        if (auto sport = TryParse<uint16_t>(parser, L"sport")) {
+        if (auto sport = TryParse<uint16_t>(parser, "sport")) {
             ev.fields[L"SourcePort"] = std::to_wstring(*sport);
         }
-        if (auto dport = TryParse<uint16_t>(parser, L"dport")) {
+        if (auto dport = TryParse<uint16_t>(parser, "dport")) {
             ev.fields[L"DestinationPort"] = std::to_wstring(*dport);
         }
 
@@ -215,15 +215,15 @@ void EtwKernelCollector::Run() {
         ev.source = L"etw";
         ev.source_eid = record.EventHeader.EventDescriptor.Opcode;
 
-        if (auto pid = TryParse<uint32_t>(parser, L"ProcessId")) {
+        if (auto pid = TryParse<uint32_t>(parser, "ProcessId")) {
             ev.proc.pid = *pid;
         }
-        if (auto tid = TryParse<uint32_t>(parser, L"ThreadId")) {
+        if (auto tid = TryParse<uint32_t>(parser, "ThreadId")) {
             ev.fields[L"ThreadId"] = std::to_wstring(*tid);
         }
-        if (auto start = TryParse<uint64_t>(parser, L"StartAddress")) {
+        if (auto start = TryParse<uint64_t>(parser, "StartAddress")) {
             ev.fields[L"StartAddress"] = std::to_wstring(*start);
-        } else if (auto start_alt = TryParse<uint64_t>(parser, L"Win32StartAddr")) {
+        } else if (auto start_alt = TryParse<uint64_t>(parser, "Win32StartAddr")) {
             ev.fields[L"StartAddress"] = std::to_wstring(*start_alt);
         }
 
@@ -247,16 +247,16 @@ void EtwKernelCollector::Run() {
         ev.source = L"etw";
         ev.source_eid = record.EventHeader.EventDescriptor.Opcode;
 
-        if (auto pid = TryParse<uint32_t>(parser, L"ProcessId")) {
+        if (auto pid = TryParse<uint32_t>(parser, "ProcessId")) {
             ev.proc.pid = *pid;
         }
-        if (auto key = TryParse<std::wstring>(parser, L"KeyName")) {
+        if (auto key = TryParse<std::wstring>(parser, "KeyName")) {
             ev.fields[L"RegistryKey"] = *key;
         }
-        if (auto value = TryParse<std::wstring>(parser, L"ValueName")) {
+        if (auto value = TryParse<std::wstring>(parser, "ValueName")) {
             ev.fields[L"RegistryValueName"] = *value;
         }
-        if (auto type = TryParse<uint32_t>(parser, L"Type")) {
+        if (auto type = TryParse<uint32_t>(parser, "Type")) {
             ev.fields[L"RegistryValueType"] = std::to_wstring(*type);
         }
 
