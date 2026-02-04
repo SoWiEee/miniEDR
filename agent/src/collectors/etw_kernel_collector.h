@@ -7,8 +7,15 @@
 #include <evntrace.h>
 
 #include <functional>
+#include <memory>
 #include <string>
 #include <thread>
+
+namespace krabs {
+namespace kernel {
+class trace;
+} // namespace kernel
+} // namespace krabs
 
 namespace miniedr {
 
@@ -31,17 +38,8 @@ private:
 
     void Run();
 
-    void* session_handle_ = nullptr; // TRACEHANDLE
-    void* trace_handle_ = nullptr;   // TRACEHANDLE
-
-    bool started_session_ = false;
+    std::unique_ptr<krabs::kernel::trace> trace_;
     bool stop_requested_ = false;
-
-    static void WINAPI OnEventRecord(_EVENT_RECORD* record);
-    void HandleRecord(_EVENT_RECORD* record);
-
-    static std::wstring GetStringProp(_EVENT_RECORD* record, const wchar_t* name);
-    static uint32_t GetUInt32Prop(_EVENT_RECORD* record, const wchar_t* name);
 };
 
 } // namespace miniedr
