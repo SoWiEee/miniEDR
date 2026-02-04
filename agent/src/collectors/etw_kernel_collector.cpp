@@ -2,8 +2,6 @@
 
 #ifdef _WIN32
 
-#define INITGUID
-#include <initguid.h>
 #include <evntrace.h>
 
 #include <krabs/krabs.hpp>
