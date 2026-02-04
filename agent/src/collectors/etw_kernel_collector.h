@@ -34,7 +34,7 @@ private:
 
     void Run();
 
-    std::unique_ptr<krabs::kernel::trace> trace_;
+    std::unique_ptr<krabs::kernel_trace> trace_;
     bool stop_requested_ = false;
 };
 

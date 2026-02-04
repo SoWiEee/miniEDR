@@ -96,7 +96,7 @@ void EtwKernelCollector::Stop() {
 }
 
 void EtwKernelCollector::Run() {
-    trace_ = std::make_unique<krabs::kernel::trace>();
+    trace_ = std::make_unique<krabs::kernel_trace>();
 
     krabs::kernel::process_provider process_provider;
     process_provider.add_on_event_callback([this](const EVENT_RECORD& record, const krabs::trace_context& context) {
