@@ -181,7 +181,7 @@ void EtwKernelCollector::Run() {
         if (stop_requested_ || !cb_) return;
 
         krabs::schema schema(record, context.schema_locator);
-        const std::wstring event_name = ToWString(schema.event_name());
+        const std::wstring event_name = std::wstring(schema.event_name());
         if (!ContainsCaseInsensitive(event_name, L"connect")) return;
 
         krabs::parser parser(schema);
@@ -220,7 +220,7 @@ void EtwKernelCollector::Run() {
         if (stop_requested_ || !cb_) return;
 
         krabs::schema schema(record, context.schema_locator);
-        const std::wstring event_name = ToWString(schema.event_name());
+        const std::wstring event_name = std::wstring(schema.event_name());
         if (!ContainsCaseInsensitive(event_name, L"thread")) return;
 
         krabs::parser parser(schema);
@@ -252,7 +252,7 @@ void EtwKernelCollector::Run() {
         if (stop_requested_ || !cb_) return;
 
         krabs::schema schema(record, context.schema_locator);
-        const std::wstring event_name = ToWString(schema.event_name());
+        const std::wstring event_name = std::wstring(schema.event_name());
         if (!ContainsCaseInsensitive(event_name, L"setvalue")) return;
 
         krabs::parser parser(schema);
