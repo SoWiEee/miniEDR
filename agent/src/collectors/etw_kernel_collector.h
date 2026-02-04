@@ -6,16 +6,12 @@
 #include <Windows.h>
 #include <evntrace.h>
 
+#include <krabs/krabs.hpp>
+
 #include <functional>
 #include <memory>
 #include <string>
 #include <thread>
-
-namespace krabs {
-namespace kernel {
-class trace;
-} // namespace kernel
-} // namespace krabs
 
 namespace miniedr {
 
