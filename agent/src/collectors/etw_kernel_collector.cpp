@@ -118,11 +118,11 @@ void EtwKernelCollector::Run() {
         if (auto ppid = TryParse<uint32_t>(parser, "ParentId")) {
             ev.proc.ppid = *ppid;
         }
-        if (auto image = TryParse<std::wstring>(parser, "ImageFileName")) {
-            ev.proc.image = *image;
+        if (auto image = TryParse<std::string>(parser, "ImageFileName")) {
+            ev.proc.image = ToWString(*image);
         }
-        if (auto cmd = TryParse<std::wstring>(parser, "CommandLine")) {
-            ev.proc.command_line = *cmd;
+        if (auto cmd = TryParse<std::string>(parser, "CommandLine")) {
+            ev.proc.command_line = ToWString(*cmd);
         }
 
         EmitJsonPayload(ev, schema, record);
@@ -147,10 +147,10 @@ void EtwKernelCollector::Run() {
         }
 
         std::wstring image_loaded;
-        if (auto image = TryParse<std::wstring>(parser, "FileName")) {
-            image_loaded = *image;
-        } else if (auto image = TryParse<std::wstring>(parser, "ImageFileName")) {
-            image_loaded = *image;
+        if (auto image = TryParse<std::string>(parser, "FileName")) {
+            image_loaded = ToWString(*image);
+        } else if (auto image = TryParse<std::string>(parser, "ImageFileName")) {
+            image_loaded = ToWString(*image);
         }
         if (!image_loaded.empty()) {
             ev.fields[L"ImageLoaded"] = image_loaded;
@@ -250,11 +250,11 @@ void EtwKernelCollector::Run() {
         if (auto pid = TryParse<uint32_t>(parser, "ProcessId")) {
             ev.proc.pid = *pid;
         }
-        if (auto key = TryParse<std::wstring>(parser, "KeyName")) {
-            ev.fields[L"RegistryKey"] = *key;
+        if (auto key = TryParse<std::string>(parser, "KeyName")) {
+            ev.fields[L"RegistryKey"] = ToWString(*key);
         }
-        if (auto value = TryParse<std::wstring>(parser, "ValueName")) {
-            ev.fields[L"RegistryValueName"] = *value;
+        if (auto value = TryParse<std::string>(parser, "ValueName")) {
+            ev.fields[L"RegistryValueName"] = ToWString(*value);
         }
         if (auto type = TryParse<uint32_t>(parser, "Type")) {
             ev.fields[L"RegistryValueType"] = std::to_wstring(*type);
