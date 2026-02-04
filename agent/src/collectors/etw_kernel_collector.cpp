@@ -17,6 +17,11 @@
 #pragma comment(lib, "tdh.lib")
 #pragma comment(lib, "ws2_32.lib")
 
+extern "C" const GUID SystemTraceControlGuid = {0x9e814aad,
+                                                0x3204,
+                                                0x11d2,
+                                                {0x9a, 0x82, 0x00, 0x60, 0x08, 0xa8, 0x69, 0x39}};
+
 namespace miniedr {
 
 namespace {

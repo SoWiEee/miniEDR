@@ -34,7 +34,7 @@ find_library(DETOURS_LIBRARY detours REQUIRED)
 target_include_directories(miniedr PRIVATE src ../driver/include ${DETOURS_INCLUDE_DIRS} ${KRABSETW_INCLUDE_DIR})
 
 if (WIN32)
-  target_link_libraries(miniedr PRIVATE wevtapi advapi32 tdh wmiguid xmllite crypt32 wintrust bcrypt ws2_32 nlohmann_json::nlohmann_json ${DETOURS_LIBRARY})
+  target_link_libraries(miniedr PRIVATE wevtapi advapi32 tdh xmllite crypt32 wintrust bcrypt ws2_32 nlohmann_json::nlohmann_json ${DETOURS_LIBRARY})
   target_compile_definitions(miniedr PRIVATE UNICODE _UNICODE)
 endif()
 
