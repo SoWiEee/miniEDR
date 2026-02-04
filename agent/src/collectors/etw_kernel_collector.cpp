@@ -61,6 +61,12 @@ void AddEtwMetadata(json& payload, const krabs::schema& schema, const EVENT_RECO
     payload["event_name"] = ToWString(schema.event_name());
 }
 
+void EmitJsonPayload(CanonicalEvent& ev, const krabs::schema& schema, const EVENT_RECORD& record) {
+    json payload;
+    AddEtwMetadata(payload, schema, record);
+    ev.fields[L"EtwPayloadJson"] = ToWString(payload.dump());
+}
+
 } // namespace
 
 EtwKernelCollector::EtwKernelCollector() = default;
@@ -119,9 +125,7 @@ void EtwKernelCollector::Run() {
             ev.proc.command_line = *cmd;
         }
 
-        json payload;
-        AddEtwMetadata(payload, schema, record);
-        ev.fields[L"EtwPayloadJson"] = ToWString(payload.dump());
+        EmitJsonPayload(ev, schema, record);
 
         cb_(ev);
     });
@@ -152,9 +156,7 @@ void EtwKernelCollector::Run() {
             ev.fields[L"ImageLoaded"] = image_loaded;
         }
 
-        json payload;
-        AddEtwMetadata(payload, schema, record);
-        ev.fields[L"EtwPayloadJson"] = ToWString(payload.dump());
+        EmitJsonPayload(ev, schema, record);
 
         cb_(ev);
     });
@@ -193,9 +195,72 @@ void EtwKernelCollector::Run() {
             ev.fields[L"DestinationPort"] = std::to_wstring(*dport);
         }
 
-        json payload;
-        AddEtwMetadata(payload, schema, record);
-        ev.fields[L"EtwPayloadJson"] = ToWString(payload.dump());
+        EmitJsonPayload(ev, schema, record);
+
+        cb_(ev);
+    });
+
+    krabs::kernel::thread_provider thread_provider;
+    thread_provider.add_on_event_callback([this](const EVENT_RECORD& record, const krabs::trace_context& context) {
+        if (stop_requested_ || !cb_) return;
+
+        krabs::schema schema(record, context.schema_locator);
+        const std::wstring event_name = ToWString(schema.event_name());
+        if (!ContainsCaseInsensitive(event_name, L"thread")) return;
+
+        krabs::parser parser(schema);
+
+        CanonicalEvent ev;
+        ev.type = EventType::CreateRemoteThread;
+        ev.source = L"etw";
+        ev.source_eid = record.EventHeader.EventDescriptor.Opcode;
+
+        if (auto pid = TryParse<uint32_t>(parser, L"ProcessId")) {
+            ev.proc.pid = *pid;
+        }
+        if (auto tid = TryParse<uint32_t>(parser, L"ThreadId")) {
+            ev.fields[L"ThreadId"] = std::to_wstring(*tid);
+        }
+        if (auto start = TryParse<uint64_t>(parser, L"StartAddress")) {
+            ev.fields[L"StartAddress"] = std::to_wstring(*start);
+        } else if (auto start_alt = TryParse<uint64_t>(parser, L"Win32StartAddr")) {
+            ev.fields[L"StartAddress"] = std::to_wstring(*start_alt);
+        }
+
+        EmitJsonPayload(ev, schema, record);
+
+        cb_(ev);
+    });
+
+    krabs::kernel::registry_provider registry_provider;
+    registry_provider.add_on_event_callback([this](const EVENT_RECORD& record, const krabs::trace_context& context) {
+        if (stop_requested_ || !cb_) return;
+
+        krabs::schema schema(record, context.schema_locator);
+        const std::wstring event_name = ToWString(schema.event_name());
+        if (!ContainsCaseInsensitive(event_name, L"setvalue")) return;
+
+        krabs::parser parser(schema);
+
+        CanonicalEvent ev;
+        ev.type = EventType::RegistrySetValue;
+        ev.source = L"etw";
+        ev.source_eid = record.EventHeader.EventDescriptor.Opcode;
+
+        if (auto pid = TryParse<uint32_t>(parser, L"ProcessId")) {
+            ev.proc.pid = *pid;
+        }
+        if (auto key = TryParse<std::wstring>(parser, L"KeyName")) {
+            ev.fields[L"RegistryKey"] = *key;
+        }
+        if (auto value = TryParse<std::wstring>(parser, L"ValueName")) {
+            ev.fields[L"RegistryValueName"] = *value;
+        }
+        if (auto type = TryParse<uint32_t>(parser, L"Type")) {
+            ev.fields[L"RegistryValueType"] = std::to_wstring(*type);
+        }
+
+        EmitJsonPayload(ev, schema, record);
 
         cb_(ev);
     });
@@ -203,6 +268,8 @@ void EtwKernelCollector::Run() {
     trace_->enable(process_provider);
     trace_->enable(image_provider);
     trace_->enable(network_provider);
+    trace_->enable(thread_provider);
+    trace_->enable(registry_provider);
 
     trace_->start();
 }
