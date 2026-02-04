@@ -25,6 +25,14 @@ std::wstring ToWString(const std::string& input) {
     return std::wstring(input.begin(), input.end());
 }
 
+std::string ToString(const std::string& input) {
+    return input;
+}
+
+std::string ToString(const std::wstring& input) {
+    return std::string(input.begin(), input.end());
+}
+
 std::wstring Ipv4ToWString(uint32_t addr) {
     addr = ntohl(addr);
     std::wstringstream ss;
@@ -45,7 +53,7 @@ bool ContainsCaseInsensitive(const std::wstring& haystack, const std::wstring& n
 }
 
 template <typename T>
-std::optional<T> TryParse(const krabs::parser& parser, const char* name) {
+std::optional<T> TryParse(krabs::parser& parser, const std::wstring& name) {
     try {
         return parser.parse<T>(name);
     } catch (const std::exception&) {
@@ -57,8 +65,8 @@ void AddEtwMetadata(json& payload, const krabs::schema& schema, const EVENT_RECO
     payload["event_id"] = record.EventHeader.EventDescriptor.Id;
     payload["opcode"] = record.EventHeader.EventDescriptor.Opcode;
     payload["task"] = record.EventHeader.EventDescriptor.Task;
-    payload["provider"] = ToWString(schema.provider_name());
-    payload["event_name"] = ToWString(schema.event_name());
+    payload["provider"] = ToString(schema.provider_name());
+    payload["event_name"] = ToString(schema.event_name());
 }
 
 void EmitJsonPayload(CanonicalEvent& ev, const krabs::schema& schema, const EVENT_RECORD& record) {
@@ -112,17 +120,17 @@ void EtwKernelCollector::Run() {
         ev.source = L"etw";
         ev.source_eid = record.EventHeader.EventDescriptor.Opcode;
 
-        if (auto pid = TryParse<uint32_t>(parser, "ProcessId")) {
+        if (auto pid = TryParse<uint32_t>(parser, L"ProcessId")) {
             ev.proc.pid = *pid;
         }
-        if (auto ppid = TryParse<uint32_t>(parser, "ParentId")) {
+        if (auto ppid = TryParse<uint32_t>(parser, L"ParentId")) {
             ev.proc.ppid = *ppid;
         }
-        if (auto image = TryParse<std::string>(parser, "ImageFileName")) {
-            ev.proc.image = ToWString(*image);
+        if (auto image = TryParse<std::wstring>(parser, L"ImageFileName")) {
+            ev.proc.image = *image;
         }
-        if (auto cmd = TryParse<std::string>(parser, "CommandLine")) {
-            ev.proc.command_line = ToWString(*cmd);
+        if (auto cmd = TryParse<std::wstring>(parser, L"CommandLine")) {
+            ev.proc.command_line = *cmd;
         }
 
         EmitJsonPayload(ev, schema, record);
@@ -142,15 +150,15 @@ void EtwKernelCollector::Run() {
         ev.source = L"etw";
         ev.source_eid = record.EventHeader.EventDescriptor.Opcode;
 
-        if (auto pid = TryParse<uint32_t>(parser, "ProcessId")) {
+        if (auto pid = TryParse<uint32_t>(parser, L"ProcessId")) {
             ev.proc.pid = *pid;
         }
 
         std::wstring image_loaded;
-        if (auto image = TryParse<std::string>(parser, "FileName")) {
-            image_loaded = ToWString(*image);
-        } else if (auto image = TryParse<std::string>(parser, "ImageFileName")) {
-            image_loaded = ToWString(*image);
+        if (auto file_name = TryParse<std::wstring>(parser, L"FileName")) {
+            image_loaded = *file_name;
+        } else if (auto image_name = TryParse<std::wstring>(parser, L"ImageFileName")) {
+            image_loaded = *image_name;
         }
         if (!image_loaded.empty()) {
             ev.fields[L"ImageLoaded"] = image_loaded;
@@ -176,22 +184,22 @@ void EtwKernelCollector::Run() {
         ev.source = L"etw";
         ev.source_eid = record.EventHeader.EventDescriptor.Opcode;
 
-        if (auto pid = TryParse<uint32_t>(parser, "pid")) {
+        if (auto pid = TryParse<uint32_t>(parser, L"pid")) {
             ev.proc.pid = *pid;
-        } else if (auto pid_alt = TryParse<uint32_t>(parser, "ProcessId")) {
+        } else if (auto pid_alt = TryParse<uint32_t>(parser, L"ProcessId")) {
             ev.proc.pid = *pid_alt;
         }
 
-        if (auto saddr = TryParse<uint32_t>(parser, "saddr")) {
+        if (auto saddr = TryParse<uint32_t>(parser, L"saddr")) {
             ev.fields[L"SourceIp"] = Ipv4ToWString(*saddr);
         }
-        if (auto daddr = TryParse<uint32_t>(parser, "daddr")) {
+        if (auto daddr = TryParse<uint32_t>(parser, L"daddr")) {
             ev.fields[L"DestinationIp"] = Ipv4ToWString(*daddr);
         }
-        if (auto sport = TryParse<uint16_t>(parser, "sport")) {
+        if (auto sport = TryParse<uint16_t>(parser, L"sport")) {
             ev.fields[L"SourcePort"] = std::to_wstring(*sport);
         }
-        if (auto dport = TryParse<uint16_t>(parser, "dport")) {
+        if (auto dport = TryParse<uint16_t>(parser, L"dport")) {
             ev.fields[L"DestinationPort"] = std::to_wstring(*dport);
         }
 
@@ -215,15 +223,15 @@ void EtwKernelCollector::Run() {
         ev.source = L"etw";
         ev.source_eid = record.EventHeader.EventDescriptor.Opcode;
 
-        if (auto pid = TryParse<uint32_t>(parser, "ProcessId")) {
+        if (auto pid = TryParse<uint32_t>(parser, L"ProcessId")) {
             ev.proc.pid = *pid;
         }
-        if (auto tid = TryParse<uint32_t>(parser, "ThreadId")) {
+        if (auto tid = TryParse<uint32_t>(parser, L"ThreadId")) {
             ev.fields[L"ThreadId"] = std::to_wstring(*tid);
         }
-        if (auto start = TryParse<uint64_t>(parser, "StartAddress")) {
+        if (auto start = TryParse<uint64_t>(parser, L"StartAddress")) {
             ev.fields[L"StartAddress"] = std::to_wstring(*start);
-        } else if (auto start_alt = TryParse<uint64_t>(parser, "Win32StartAddr")) {
+        } else if (auto start_alt = TryParse<uint64_t>(parser, L"Win32StartAddr")) {
             ev.fields[L"StartAddress"] = std::to_wstring(*start_alt);
         }
 
@@ -247,16 +255,16 @@ void EtwKernelCollector::Run() {
         ev.source = L"etw";
         ev.source_eid = record.EventHeader.EventDescriptor.Opcode;
 
-        if (auto pid = TryParse<uint32_t>(parser, "ProcessId")) {
+        if (auto pid = TryParse<uint32_t>(parser, L"ProcessId")) {
             ev.proc.pid = *pid;
         }
-        if (auto key = TryParse<std::string>(parser, "KeyName")) {
-            ev.fields[L"RegistryKey"] = ToWString(*key);
+        if (auto key = TryParse<std::wstring>(parser, L"KeyName")) {
+            ev.fields[L"RegistryKey"] = *key;
         }
-        if (auto value = TryParse<std::string>(parser, "ValueName")) {
-            ev.fields[L"RegistryValueName"] = ToWString(*value);
+        if (auto value = TryParse<std::wstring>(parser, L"ValueName")) {
+            ev.fields[L"RegistryValueName"] = *value;
         }
-        if (auto type = TryParse<uint32_t>(parser, "Type")) {
+        if (auto type = TryParse<uint32_t>(parser, L"Type")) {
             ev.fields[L"RegistryValueType"] = std::to_wstring(*type);
         }
 
