@@ -2,39 +2,72 @@
 
 #ifdef _WIN32
 
-#define INITGUID
+#include <krabs/krabs.hpp>
+#include <nlohmann/json.hpp>
 
-#include <windows.h>
-#include <evntrace.h>
-#include <tdh.h>
-#include <wmistr.h>
-#include <objbase.h>
-
-#include <iostream>
-#include <vector>
+#include <winsock2.h>
+#include <algorithm>
+#include <cwctype>
+#include <optional>
+#include <sstream>
 
 #pragma comment(lib, "advapi32.lib")
 #pragma comment(lib, "tdh.lib")
-#pragma comment(lib, "ole32.lib")
-
-#ifndef SystemTraceControlGuid
-DEFINE_GUID(SystemTraceControlGuid,
-    0x9e814aad, 0x3204, 0x11d2, 0x9a, 0x82, 0x00, 0x60, 0x08, 0xa8, 0x69, 0x39);
-#endif
-
-#ifndef ProcessGuid
-DEFINE_GUID(ProcessGuid,
-    0x3d6fa8d0, 0xfe05, 0x11d0, 0x9d, 0xf2, 0x00, 0xc0, 0x4f, 0xd7, 0xba, 0x7c);
-#endif
-
-#ifndef ImageLoadGuid
-DEFINE_GUID(ImageLoadGuid,
-    0x2cb15d1d, 0x5fc1, 0x11d2, 0xbe, 0x1a, 0x00, 0xc0, 0x4f, 0xd6, 0x0b, 0x9b);
-#endif
+#pragma comment(lib, "ws2_32.lib")
 
 namespace miniedr {
 
-static EtwKernelCollector* g_self = nullptr;
+namespace {
+
+using json = nlohmann::json;
+
+std::wstring ToWString(const std::string& input) {
+    return std::wstring(input.begin(), input.end());
+}
+
+std::wstring Ipv4ToWString(uint32_t addr) {
+    addr = ntohl(addr);
+    std::wstringstream ss;
+    ss << ((addr >> 24) & 0xFF) << L"."
+       << ((addr >> 16) & 0xFF) << L"."
+       << ((addr >> 8) & 0xFF) << L"."
+       << (addr & 0xFF);
+    return ss.str();
+}
+
+bool ContainsCaseInsensitive(const std::wstring& haystack, const std::wstring& needle) {
+    if (needle.empty()) return true;
+    auto it = std::search(haystack.begin(), haystack.end(), needle.begin(), needle.end(),
+                          [](wchar_t a, wchar_t b) {
+                              return std::towlower(a) == std::towlower(b);
+                          });
+    return it != haystack.end();
+}
+
+template <typename T>
+std::optional<T> TryParse(const krabs::parser& parser, const wchar_t* name) {
+    try {
+        return parser.parse<T>(name);
+    } catch (const std::exception&) {
+        return std::nullopt;
+    }
+}
+
+void AddEtwMetadata(json& payload, const krabs::schema& schema, const EVENT_RECORD& record) {
+    payload["event_id"] = record.EventHeader.EventDescriptor.Id;
+    payload["opcode"] = record.EventHeader.EventDescriptor.Opcode;
+    payload["task"] = record.EventHeader.EventDescriptor.Task;
+    payload["provider"] = ToWString(schema.provider_name());
+    payload["event_name"] = ToWString(schema.event_name());
+}
+
+void EmitJsonPayload(CanonicalEvent& ev, const krabs::schema& schema, const EVENT_RECORD& record) {
+    json payload;
+    AddEtwMetadata(payload, schema, record);
+    ev.fields[L"EtwPayloadJson"] = ToWString(payload.dump());
+}
+
+} // namespace
 
 EtwKernelCollector::EtwKernelCollector() = default;
 
@@ -46,9 +79,6 @@ bool EtwKernelCollector::Start(Callback cb) {
     cb_ = std::move(cb);
     stop_requested_ = false;
 
-    // Only one live instance in this educational implementation.
-    g_self = this;
-
     worker_ = std::thread([this]() { Run(); });
     return true;
 }
@@ -56,183 +86,192 @@ bool EtwKernelCollector::Start(Callback cb) {
 void EtwKernelCollector::Stop() {
     stop_requested_ = true;
 
-    if (trace_handle_) {
-        // CloseTrace will cause ProcessTrace to return.
-        CloseTrace((TRACEHANDLE)trace_handle_);
-        trace_handle_ = nullptr;
+    if (trace_) {
+        trace_->stop();
     }
 
     if (worker_.joinable()) worker_.join();
 
-    if (started_session_ && session_handle_) {
-        // Stop the kernel logger only if we started it.
-        // If another tool started it, stopping it would be disruptive.
-        EVENT_TRACE_PROPERTIES props = {};
-        ULONG status = ControlTrace((TRACEHANDLE)session_handle_, KERNEL_LOGGER_NAME, &props, EVENT_TRACE_CONTROL_STOP);
-        (void)status;
-    }
-
-    session_handle_ = nullptr;
-    started_session_ = false;
-    g_self = nullptr;
-}
-
-static EVENT_TRACE_PROPERTIES* AllocKernelProps(size_t name_chars = 1024) {
-    const size_t bytes = sizeof(EVENT_TRACE_PROPERTIES) + (name_chars * sizeof(wchar_t)) * 2;
-    auto* p = (EVENT_TRACE_PROPERTIES*)calloc(1, bytes);
-    if (!p) return nullptr;
-
-    p->Wnode.BufferSize = (ULONG)bytes;
-    p->Wnode.Guid = SystemTraceControlGuid;
-    p->Wnode.ClientContext = 1; // QPC
-    p->Wnode.Flags = WNODE_FLAG_TRACED_GUID;
-
-    p->LogFileMode = EVENT_TRACE_REAL_TIME_MODE;
-    p->LoggerNameOffset = sizeof(EVENT_TRACE_PROPERTIES);
-    p->LogFileNameOffset = sizeof(EVENT_TRACE_PROPERTIES) + (ULONG)(name_chars * sizeof(wchar_t));
-
-    // Collect process + image load signals (starter set).
-    p->EnableFlags = EVENT_TRACE_FLAG_PROCESS | EVENT_TRACE_FLAG_IMAGE_LOAD;
-
-    return p;
+    trace_.reset();
 }
 
 void EtwKernelCollector::Run() {
-    auto* props = AllocKernelProps();
-    if (!props) {
-        std::wcerr << L"[EtwKernelCollector] Allocation failed.\n";
-        return;
-    }
+    trace_ = std::make_unique<krabs::kernel::trace>();
 
-    TRACEHANDLE session = 0;
-    ULONG status = StartTrace(&session, KERNEL_LOGGER_NAME, props);
-    if (status == ERROR_ALREADY_EXISTS) {
-        // Session already running - that's fine; we'll just consume.
-        started_session_ = false;
-    } else if (status != ERROR_SUCCESS) {
-        std::wcerr << L"[EtwKernelCollector] StartTrace failed. status=" << status
-                   << L". Try running as Administrator.\n";
-        free(props);
-        return;
-    } else {
-        started_session_ = true;
-    }
+    krabs::kernel::process_provider process_provider;
+    process_provider.add_on_event_callback([this](const EVENT_RECORD& record, const krabs::trace_context& context) {
+        if (stop_requested_ || !cb_) return;
 
-    session_handle_ = (void*)session;
+        if (record.EventHeader.EventDescriptor.Opcode != EVENT_TRACE_TYPE_START) return;
 
-    EVENT_TRACE_LOGFILE logfile = {};
-    logfile.LoggerName = (LPWSTR)KERNEL_LOGGER_NAME;
-    logfile.ProcessTraceMode = PROCESS_TRACE_MODE_REAL_TIME | PROCESS_TRACE_MODE_EVENT_RECORD;
-    logfile.EventRecordCallback = (PEVENT_RECORD_CALLBACK)EtwKernelCollector::OnEventRecord;
+        krabs::schema schema(record, context.schema_locator);
+        krabs::parser parser(schema);
 
-    TRACEHANDLE trace = OpenTrace(&logfile);
-    if (trace == INVALID_PROCESSTRACE_HANDLE) {
-        std::wcerr << L"[EtwKernelCollector] OpenTrace failed. GetLastError=" << GetLastError() << L"\n";
-        if (started_session_) {
-            ControlTrace(session, KERNEL_LOGGER_NAME, props, EVENT_TRACE_CONTROL_STOP);
+        CanonicalEvent ev;
+        ev.type = EventType::ProcessCreate;
+        ev.source = L"etw";
+        ev.source_eid = record.EventHeader.EventDescriptor.Opcode;
+
+        if (auto pid = TryParse<uint32_t>(parser, L"ProcessId")) {
+            ev.proc.pid = *pid;
         }
-        free(props);
-        return;
-    }
-    trace_handle_ = (void*)trace;
-
-    std::wcout << L"[EtwKernelCollector] Consuming NT Kernel Logger (Process/ImageLoad) in real-time.\n";
-
-    status = ProcessTrace(&trace, 1, nullptr, nullptr);
-    (void)status;
-
-    free(props);
-}
-
-void WINAPI EtwKernelCollector::OnEventRecord(_EVENT_RECORD* record) {
-    if (g_self) g_self->HandleRecord(record);
-}
-
-static std::wstring GuidToWString(const GUID& g) {
-    wchar_t buf[64] = {};
-    StringFromGUID2(g, buf, 64);
-    return buf;
-}
-
-std::wstring EtwKernelCollector::GetStringProp(_EVENT_RECORD* record, const wchar_t* name) {
-    PROPERTY_DATA_DESCRIPTOR desc = {};
-    desc.PropertyName = (ULONGLONG)name;
-    desc.ArrayIndex = ULONG_MAX;
-
-    ULONG size = 0;
-    if (TdhGetPropertySize(record, 0, nullptr, 1, &desc, &size) != ERROR_SUCCESS || size == 0) {
-        return L"";
-    }
-    std::vector<BYTE> buf(size);
-    if (TdhGetProperty(record, 0, nullptr, 1, &desc, size, buf.data()) != ERROR_SUCCESS) {
-        return L"";
-    }
-
-    // Many kernel MOF string fields are null-terminated wide strings.
-    const wchar_t* ws = reinterpret_cast<const wchar_t*>(buf.data());
-    size_t n = 0;
-    while ((n + 1) * sizeof(wchar_t) <= size && ws[n] != L'\0') n++;
-    return std::wstring(ws, n);
-}
-
-uint32_t EtwKernelCollector::GetUInt32Prop(_EVENT_RECORD* record, const wchar_t* name) {
-    PROPERTY_DATA_DESCRIPTOR desc = {};
-    desc.PropertyName = (ULONGLONG)name;
-    desc.ArrayIndex = ULONG_MAX;
-
-    ULONG size = 0;
-    if (TdhGetPropertySize(record, 0, nullptr, 1, &desc, &size) != ERROR_SUCCESS || size < sizeof(uint32_t)) {
-        return 0;
-    }
-    uint32_t v = 0;
-    if (TdhGetProperty(record, 0, nullptr, 1, &desc, sizeof(uint32_t), (PBYTE)&v) != ERROR_SUCCESS) {
-        return 0;
-    }
-    return v;
-}
-
-void EtwKernelCollector::HandleRecord(_EVENT_RECORD* record) {
-    if (stop_requested_ || !cb_) return;
-
-    // Provider IDs for NT kernel logger classes are documented as constants.
-    // ProcessGuid / ImageLoadGuid are defined in evntrace.h when INITGUID is set.
-    // We use TDH property extraction for a few well-known fields; missing fields are tolerated.
-
-    const GUID& prov = record->EventHeader.ProviderId;
-
-    CanonicalEvent ev;
-    ev.source = L"etw";
-    ev.source_eid = record->EventHeader.EventDescriptor.Opcode; // opcode maps to EVENT_TRACE_TYPE_*
-
-    // Timestamp: use QPC-relative; for Phase2 we keep it blank (students can add conversion later).
-    // If you want a wall-clock timestamp, convert record->EventHeader.TimeStamp.
-    ev.timestamp_utc = L"";
-
-    if (IsEqualGUID(prov, ProcessGuid)) {
-        // Process event types: START (1), END (2), etc.
-        if (record->EventHeader.EventDescriptor.Opcode == EVENT_TRACE_TYPE_START) {
-            ev.type = EventType::ProcessCreate;
-            ev.proc.pid = GetUInt32Prop(record, L"ProcessId");
-            ev.proc.ppid = GetUInt32Prop(record, L"ParentId");
-            ev.proc.image = GetStringProp(record, L"ImageFileName");
-            ev.proc.command_line = GetStringProp(record, L"CommandLine"); // may be empty depending on OS/version
-            cb_(ev);
+        if (auto ppid = TryParse<uint32_t>(parser, L"ParentId")) {
+            ev.proc.ppid = *ppid;
         }
-        return;
-    }
+        if (auto image = TryParse<std::wstring>(parser, L"ImageFileName")) {
+            ev.proc.image = *image;
+        }
+        if (auto cmd = TryParse<std::wstring>(parser, L"CommandLine")) {
+            ev.proc.command_line = *cmd;
+        }
 
-    if (IsEqualGUID(prov, ImageLoadGuid)) {
-        // Image load events; map to ImageLoad canonical type.
-        ev.type = EventType::ImageLoad;
-        ev.proc.pid = GetUInt32Prop(record, L"ProcessId");
-        ev.fields[L"ImageLoaded"] = GetStringProp(record, L"FileName");
-        if (ev.fields[L"ImageLoaded"].empty()) ev.fields[L"ImageLoaded"] = GetStringProp(record, L"ImageFileName");
+        EmitJsonPayload(ev, schema, record);
+
         cb_(ev);
-        return;
-    }
+    });
 
-    // Other kernel classes are ignored in Phase 2 starter.
-    (void)GuidToWString;
+    krabs::kernel::image_load_provider image_provider;
+    image_provider.add_on_event_callback([this](const EVENT_RECORD& record, const krabs::trace_context& context) {
+        if (stop_requested_ || !cb_) return;
+
+        krabs::schema schema(record, context.schema_locator);
+        krabs::parser parser(schema);
+
+        CanonicalEvent ev;
+        ev.type = EventType::ImageLoad;
+        ev.source = L"etw";
+        ev.source_eid = record.EventHeader.EventDescriptor.Opcode;
+
+        if (auto pid = TryParse<uint32_t>(parser, L"ProcessId")) {
+            ev.proc.pid = *pid;
+        }
+
+        std::wstring image_loaded;
+        if (auto image = TryParse<std::wstring>(parser, L"FileName")) {
+            image_loaded = *image;
+        } else if (auto image = TryParse<std::wstring>(parser, L"ImageFileName")) {
+            image_loaded = *image;
+        }
+        if (!image_loaded.empty()) {
+            ev.fields[L"ImageLoaded"] = image_loaded;
+        }
+
+        EmitJsonPayload(ev, schema, record);
+
+        cb_(ev);
+    });
+
+    krabs::kernel::network_tcpip_provider network_provider;
+    network_provider.add_on_event_callback([this](const EVENT_RECORD& record, const krabs::trace_context& context) {
+        if (stop_requested_ || !cb_) return;
+
+        krabs::schema schema(record, context.schema_locator);
+        const std::wstring event_name = ToWString(schema.event_name());
+        if (!ContainsCaseInsensitive(event_name, L"connect")) return;
+
+        krabs::parser parser(schema);
+
+        CanonicalEvent ev;
+        ev.type = EventType::NetworkConnect;
+        ev.source = L"etw";
+        ev.source_eid = record.EventHeader.EventDescriptor.Opcode;
+
+        if (auto pid = TryParse<uint32_t>(parser, L"pid")) {
+            ev.proc.pid = *pid;
+        } else if (auto pid_alt = TryParse<uint32_t>(parser, L"ProcessId")) {
+            ev.proc.pid = *pid_alt;
+        }
+
+        if (auto saddr = TryParse<uint32_t>(parser, L"saddr")) {
+            ev.fields[L"SourceIp"] = Ipv4ToWString(*saddr);
+        }
+        if (auto daddr = TryParse<uint32_t>(parser, L"daddr")) {
+            ev.fields[L"DestinationIp"] = Ipv4ToWString(*daddr);
+        }
+        if (auto sport = TryParse<uint16_t>(parser, L"sport")) {
+            ev.fields[L"SourcePort"] = std::to_wstring(*sport);
+        }
+        if (auto dport = TryParse<uint16_t>(parser, L"dport")) {
+            ev.fields[L"DestinationPort"] = std::to_wstring(*dport);
+        }
+
+        EmitJsonPayload(ev, schema, record);
+
+        cb_(ev);
+    });
+
+    krabs::kernel::thread_provider thread_provider;
+    thread_provider.add_on_event_callback([this](const EVENT_RECORD& record, const krabs::trace_context& context) {
+        if (stop_requested_ || !cb_) return;
+
+        krabs::schema schema(record, context.schema_locator);
+        const std::wstring event_name = ToWString(schema.event_name());
+        if (!ContainsCaseInsensitive(event_name, L"thread")) return;
+
+        krabs::parser parser(schema);
+
+        CanonicalEvent ev;
+        ev.type = EventType::CreateRemoteThread;
+        ev.source = L"etw";
+        ev.source_eid = record.EventHeader.EventDescriptor.Opcode;
+
+        if (auto pid = TryParse<uint32_t>(parser, L"ProcessId")) {
+            ev.proc.pid = *pid;
+        }
+        if (auto tid = TryParse<uint32_t>(parser, L"ThreadId")) {
+            ev.fields[L"ThreadId"] = std::to_wstring(*tid);
+        }
+        if (auto start = TryParse<uint64_t>(parser, L"StartAddress")) {
+            ev.fields[L"StartAddress"] = std::to_wstring(*start);
+        } else if (auto start_alt = TryParse<uint64_t>(parser, L"Win32StartAddr")) {
+            ev.fields[L"StartAddress"] = std::to_wstring(*start_alt);
+        }
+
+        EmitJsonPayload(ev, schema, record);
+
+        cb_(ev);
+    });
+
+    krabs::kernel::registry_provider registry_provider;
+    registry_provider.add_on_event_callback([this](const EVENT_RECORD& record, const krabs::trace_context& context) {
+        if (stop_requested_ || !cb_) return;
+
+        krabs::schema schema(record, context.schema_locator);
+        const std::wstring event_name = ToWString(schema.event_name());
+        if (!ContainsCaseInsensitive(event_name, L"setvalue")) return;
+
+        krabs::parser parser(schema);
+
+        CanonicalEvent ev;
+        ev.type = EventType::RegistrySetValue;
+        ev.source = L"etw";
+        ev.source_eid = record.EventHeader.EventDescriptor.Opcode;
+
+        if (auto pid = TryParse<uint32_t>(parser, L"ProcessId")) {
+            ev.proc.pid = *pid;
+        }
+        if (auto key = TryParse<std::wstring>(parser, L"KeyName")) {
+            ev.fields[L"RegistryKey"] = *key;
+        }
+        if (auto value = TryParse<std::wstring>(parser, L"ValueName")) {
+            ev.fields[L"RegistryValueName"] = *value;
+        }
+        if (auto type = TryParse<uint32_t>(parser, L"Type")) {
+            ev.fields[L"RegistryValueType"] = std::to_wstring(*type);
+        }
+
+        EmitJsonPayload(ev, schema, record);
+
+        cb_(ev);
+    });
+
+    trace_->enable(process_provider);
+    trace_->enable(image_provider);
+    trace_->enable(network_provider);
+    trace_->enable(thread_provider);
+    trace_->enable(registry_provider);
+
+    trace_->start();
 }
 
 } // namespace miniedr

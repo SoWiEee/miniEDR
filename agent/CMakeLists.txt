@@ -25,13 +25,16 @@ add_executable(miniedr
   src/response/process_responder.cpp
 )
 
+find_package(krabsetw CONFIG REQUIRED)
+find_package(nlohmann_json CONFIG REQUIRED)
+
 find_path(DETOURS_INCLUDE_DIRS "detours/detours.h")
 find_library(DETOURS_LIBRARY detours REQUIRED)
 
 target_include_directories(miniedr PRIVATE src ../driver/include ${DETOURS_INCLUDE_DIRS})
 
 if (WIN32)
-  target_link_libraries(miniedr PRIVATE wevtapi advapi32 tdh xmllite crypt32 wintrust bcrypt ${DETOURS_LIBRARY})
+  target_link_libraries(miniedr PRIVATE wevtapi advapi32 tdh xmllite crypt32 wintrust bcrypt ws2_32 krabsetw::krabsetw nlohmann_json::nlohmann_json ${DETOURS_LIBRARY})
   target_compile_definitions(miniedr PRIVATE UNICODE _UNICODE)
 endif()
 
