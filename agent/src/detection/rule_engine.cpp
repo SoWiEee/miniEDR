@@ -247,9 +247,11 @@ RuleEngine::RuleEngine() {
 #ifdef _WIN32
     auto exe_dir = GetExecutableDirW();
     if (!exe_dir.empty()) {
+        candidates.push_back(exe_dir + L"\\rules\\remote_rules.json");
         candidates.push_back(exe_dir + L"\\rules\\default_rules.json");
     }
 #endif
+    candidates.push_back(L"rules\\remote_rules.json");
     candidates.push_back(L"rules\\default_rules.json");
     candidates.push_back(L"default_rules.json");
 

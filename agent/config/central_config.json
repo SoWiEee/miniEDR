@@ -1,0 +1,12 @@
+{
+  "enable": false,
+  "upload_events": true,
+  "fetch_policy": true,
+  "fetch_rules": true,
+  "poll_interval_sec": 60,
+  "server_url": "https://central.example.local",
+  "api_key": "",
+  "events_path": "/api/v1/events",
+  "policy_path": "/api/v1/policy",
+  "rules_path": "/api/v1/rules"
+}

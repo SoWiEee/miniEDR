@@ -146,10 +146,12 @@ Configuration:
 
 - Default rules live here: `rules/default_rules.json`
 - The agent attempts to load rules in this order:
-    1. `<exe_dir>\rules\default_rules.json`
-    2. `.\rules\default_rules.json`
-    3. `.\default_rules.json`
-    4. Built-in fallback rules
+    1. `<exe_dir>\rules\remote_rules.json` (if delivered by central control)
+    2. `<exe_dir>\rules\default_rules.json`
+    3. `.\rules\remote_rules.json`
+    4. `.\rules\default_rules.json`
+    5. `.\default_rules.json`
+    6. Built-in fallback rules
 
 > You can edit the JSON rules without rebuilding.
 
@@ -178,6 +180,14 @@ Files:
 - `agent/src/response/*`
 
 > You can extend this with: suspend process, isolate host/network, quarantine file, block hash, etc.
+
+## 6. Centralized control (optional)
+
+- Event upload: alerts can be posted to a central service via HTTP.
+- Policy delivery: download policy JSON (`agent\config\policy.json`) to tune response behavior on startup.
+- Rule versioning: download rules with a `version` field and store to `rules\remote_rules.json` plus `rules\remote_rules.version`.
+
+Config: `agent/config/central_config.json`
 
 # Future Work & Integration Ideas
 

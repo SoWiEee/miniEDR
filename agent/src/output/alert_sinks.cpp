@@ -124,7 +124,6 @@ static std::string BuildEcsJson(const CanonicalEvent& ev) {
     auto cmd = JsonlFileSink::JsonEscape(JsonlFileSink::NarrowUtf8(ev.proc.command_line));
     auto user = JsonlFileSink::JsonEscape(JsonlFileSink::NarrowUtf8(ev.proc.user));
     auto source = JsonlFileSink::JsonEscape(JsonlFileSink::NarrowUtf8(ev.source));
-    auto event_type = JsonlFileSink::JsonEscape(JsonlFileSink::NarrowUtf8(ev.source));
 
     auto dst_ip_it = ev.fields.find(L"DestinationIp");
     auto src_ip_it = ev.fields.find(L"SourceIp");
