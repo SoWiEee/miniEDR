@@ -49,8 +49,8 @@ void AddEtwMetadata(json& payload, const krabs::schema& schema, const EVENT_RECO
     payload["event_id"] = record.EventHeader.EventDescriptor.Id;
     payload["opcode"] = record.EventHeader.EventDescriptor.Opcode;
     payload["task"] = record.EventHeader.EventDescriptor.Task;
-    payload["provider"] = std::string(schema.provider_name());
-    payload["event_name"] = std::string(schema.event_name());
+    payload["provider"] = std::wstring(schema.provider_name());
+    payload["event_name"] = std::wstring(schema.event_name());
 }
 
 void EmitJsonPayload(CanonicalEvent& ev, const krabs::schema& schema, const EVENT_RECORD& record) {

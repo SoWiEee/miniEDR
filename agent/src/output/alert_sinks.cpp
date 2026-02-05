@@ -119,7 +119,7 @@ static std::string FieldsToJson(const std::unordered_map<std::wstring, std::wstr
 
 static std::string BuildEcsJson(const CanonicalEvent& ev) {
     std::ostringstream oss;
-    const auto pid = std::to_wstring(ev.proc.pid);
+    const auto pid = std::to_string(ev.proc.pid);
     auto image = JsonlFileSink::JsonEscape(JsonlFileSink::NarrowUtf8(ev.proc.image));
     auto cmd = JsonlFileSink::JsonEscape(JsonlFileSink::NarrowUtf8(ev.proc.command_line));
     auto user = JsonlFileSink::JsonEscape(JsonlFileSink::NarrowUtf8(ev.proc.user));
