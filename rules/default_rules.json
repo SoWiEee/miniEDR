@@ -143,6 +143,54 @@
           ]
         }
       ]
+    },
+    {
+      "id": "REG-001",
+      "title": "Run key persistence write",
+      "severity": "High",
+      "summary": "A process wrote to a Run/RunOnce registry key commonly used for persistence. Validate the value data and signing chain.",
+      "all": [
+        {
+          "field": "type",
+          "op": "equals_any",
+          "values": [
+            "RegistrySetValue"
+          ]
+        },
+        {
+          "field": "fields.RegistryKey",
+          "op": "regex_any",
+          "values": [
+            "\\\\(Run|RunOnce)($|\\\\)",
+            "CurrentVersion\\\\Run",
+            "CurrentVersion\\\\RunOnce"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "REG-002",
+      "title": "Run key persistence write (Sysmon target object)",
+      "severity": "High",
+      "summary": "A process wrote to a Run/RunOnce registry key (Sysmon TargetObject field). Validate the value data and signing chain.",
+      "all": [
+        {
+          "field": "type",
+          "op": "equals_any",
+          "values": [
+            "RegistrySetValue"
+          ]
+        },
+        {
+          "field": "fields.TargetObject",
+          "op": "regex_any",
+          "values": [
+            "\\\\(Run|RunOnce)($|\\\\)",
+            "CurrentVersion\\\\Run",
+            "CurrentVersion\\\\RunOnce"
+          ]
+        }
+      ]
     }
   ]
 }

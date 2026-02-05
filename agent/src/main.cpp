@@ -1,5 +1,6 @@
 #include "collectors/sysmon_collector.h"
 #include "collectors/etw_kernel_collector.h"
+#include "collectors/etw_user_collector.h"
 #include "collectors/driver_collector.h"
 #include "collectors/api_hook_collector.h"
 
@@ -7,8 +8,11 @@
 #include "detection/rule_engine.h"
 #include "detection/correlator.h"
 #include "output/alert_sinks.h"
+#include "output/central_sink.h"
 #include "scanners/scanner_manager.h"
 #include "response/response_manager.h"
+#include "control/central_config.h"
+#include "control/central_manager.h"
 
 #include <atomic>
 #include <csignal>
@@ -69,7 +73,17 @@ int wmain(int argc, wchar_t** argv) {
 #ifdef _WIN32
     resp_cfg.hooking = LoadHookingConfig(L"agent\\config\\hooking.json");
 #endif
+    CentralConfig central_cfg = LoadCentralConfig(L"agent\\config\\central_config.json");
+    CentralManager central_mgr(central_cfg);
+    if (central_cfg.enable) {
+        auto policy = central_mgr.LoadPolicyFromFile(L"agent\\config\\policy.json");
+        central_mgr.ApplyPolicy(resp_cfg, policy);
+    }
     ResponseManager resp_mgr(resp_cfg);
+
+    if (central_cfg.enable && central_cfg.upload_events) {
+        sinks.emplace_back(std::make_unique<CentralUploadSink>(central_mgr));
+    }
 
     auto EmitFindings = [&](const std::vector<Finding>& findings) {
     for (const auto& f : findings) {
@@ -93,6 +107,10 @@ int wmain(int argc, wchar_t** argv) {
         EmitFindings(correlator.Process(ev));
     };
 
+    if (central_cfg.enable) {
+        central_mgr.Start();
+    }
+
     std::unique_ptr<SysmonCollector> sysmon;
     if (!no_sysmon) {
         sysmon = std::make_unique<SysmonCollector>();
@@ -109,9 +127,14 @@ int wmain(int argc, wchar_t** argv) {
     }
 
     std::unique_ptr<EtwKernelCollector> etw;
+    std::unique_ptr<EtwUserCollector> etw_user;
     if (!no_etw) {
         etw = std::make_unique<EtwKernelCollector>();
         etw->Start([&](const CanonicalEvent& ev) {
+            HandleEvent(ev);
+        });
+        etw_user = std::make_unique<EtwUserCollector>();
+        etw_user->Start([&](const CanonicalEvent& ev) {
             HandleEvent(ev);
         });
     } else {
@@ -140,13 +163,15 @@ int wmain(int argc, wchar_t** argv) {
     }
 #endif
 
-while (g_running) {
+    while (g_running) {
         Sleep(200);
     }
 
     if (apihook) apihook->Stop();
     if (sysmon) sysmon->Stop();
+    if (etw_user) etw_user->Stop();
     if (etw) etw->Stop();
+    central_mgr.Stop();
 
     std::wcout << L"\nStopping.\n";
     return 0;

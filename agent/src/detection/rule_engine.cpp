@@ -34,6 +34,10 @@ static std::wstring EventTypeToString(EventType t) {
     case EventType::ImageLoad: return L"ImageLoad";
     case EventType::NetworkConnect: return L"NetworkConnect";
     case EventType::DnsQuery: return L"DnsQuery";
+    case EventType::ScriptBlock: return L"ScriptBlock";
+    case EventType::AmsiScan: return L"AmsiScan";
+    case EventType::MemoryOperation: return L"MemoryOperation";
+    case EventType::ThreatIntel: return L"ThreatIntel";
     case EventType::FileCreate: return L"FileCreate";
     case EventType::FileDelete: return L"FileDelete";
     case EventType::RegistrySetValue: return L"RegistrySetValue";
@@ -244,9 +248,11 @@ RuleEngine::RuleEngine() {
 #ifdef _WIN32
     auto exe_dir = GetExecutableDirW();
     if (!exe_dir.empty()) {
+        candidates.push_back(exe_dir + L"\\rules\\remote_rules.json");
         candidates.push_back(exe_dir + L"\\rules\\default_rules.json");
     }
 #endif
+    candidates.push_back(L"rules\\remote_rules.json");
     candidates.push_back(L"rules\\default_rules.json");
     candidates.push_back(L"default_rules.json");
 

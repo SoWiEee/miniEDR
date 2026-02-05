@@ -117,6 +117,51 @@ static std::string FieldsToJson(const std::unordered_map<std::wstring, std::wstr
     return oss.str();
 }
 
+static std::string BuildEcsJson(const CanonicalEvent& ev) {
+    std::ostringstream oss;
+    const auto pid = std::to_string(ev.proc.pid);
+    auto image = JsonlFileSink::JsonEscape(JsonlFileSink::NarrowUtf8(ev.proc.image));
+    auto cmd = JsonlFileSink::JsonEscape(JsonlFileSink::NarrowUtf8(ev.proc.command_line));
+    auto user = JsonlFileSink::JsonEscape(JsonlFileSink::NarrowUtf8(ev.proc.user));
+    auto source = JsonlFileSink::JsonEscape(JsonlFileSink::NarrowUtf8(ev.source));
+
+    auto dst_ip_it = ev.fields.find(L"DestinationIp");
+    auto src_ip_it = ev.fields.find(L"SourceIp");
+    auto dst_ip = dst_ip_it == ev.fields.end() ? "" : JsonlFileSink::JsonEscape(JsonlFileSink::NarrowUtf8(dst_ip_it->second));
+    auto src_ip = src_ip_it == ev.fields.end() ? "" : JsonlFileSink::JsonEscape(JsonlFileSink::NarrowUtf8(src_ip_it->second));
+
+    oss << "{"
+        << "\"ecs_version\":\"1.12.0\","
+        << "\"event\":{\"kind\":\"alert\",\"category\":[\"process\"],\"type\":[\"info\"],\"provider\":\"" << source << "\"},"
+        << "\"process\":{\"pid\":" << pid << ",\"executable\":\"" << image << "\",\"command_line\":\"" << cmd << "\"},"
+        << "\"user\":{\"name\":\"" << user << "\"},"
+        << "\"source\":{\"ip\":\"" << src_ip << "\"},"
+        << "\"destination\":{\"ip\":\"" << dst_ip << "\"}"
+        << "}";
+    return oss.str();
+}
+
+static std::string BuildOcsfJson(const Finding& f) {
+    std::ostringstream oss;
+    auto severity = JsonlFileSink::JsonEscape(JsonlFileSink::NarrowUtf8(f.severity));
+    auto title = JsonlFileSink::JsonEscape(JsonlFileSink::NarrowUtf8(f.title));
+    auto rule = JsonlFileSink::JsonEscape(JsonlFileSink::NarrowUtf8(f.rule_id));
+    auto source = JsonlFileSink::JsonEscape(JsonlFileSink::NarrowUtf8(f.evidence.source));
+    auto image = JsonlFileSink::JsonEscape(JsonlFileSink::NarrowUtf8(f.evidence.proc.image));
+    auto cmd = JsonlFileSink::JsonEscape(JsonlFileSink::NarrowUtf8(f.evidence.proc.command_line));
+
+    oss << "{"
+        << "\"metadata\":{\"version\":\"1.0.0\"},"
+        << "\"category_name\":\"Finding\","
+        << "\"severity\":\"" << severity << "\","
+        << "\"activity_name\":\"" << title << "\","
+        << "\"type_name\":\"" << rule << "\","
+        << "\"provider\":\"" << source << "\","
+        << "\"process\":{\"pid\":" << f.evidence.proc.pid << ",\"path\":\"" << image << "\",\"cmd_line\":\"" << cmd << "\"}"
+        << "}";
+    return oss.str();
+}
+
 void JsonlFileSink::Emit(const Finding& f) {
     std::ofstream ofs(NarrowUtf8(path_), std::ios::app);
     if (!ofs) return;
@@ -130,6 +175,8 @@ void JsonlFileSink::Emit(const Finding& f) {
     auto cmd = JsonEscape(NarrowUtf8(f.evidence.proc.command_line));
     auto timg = JsonEscape(NarrowUtf8(f.evidence.target.image));
     auto summary = JsonEscape(NarrowUtf8(f.summary));
+    auto ecs = BuildEcsJson(f.evidence);
+    auto ocsf = BuildOcsfJson(f);
 
     ofs << "{"
         << "\"severity\":\"" << sev << "\","
@@ -144,6 +191,8 @@ void JsonlFileSink::Emit(const Finding& f) {
         << "\"target_pid\":" << f.evidence.target.pid << ","
         << "\"target_image\":\"" << timg << "\","
         << "\"fields\":" << FieldsToJson(f.evidence.fields) << ","
+        << "\"ecs\":" << ecs << ","
+        << "\"ocsf\":" << ocsf << ","
         << "\"summary\":\"" << summary << "\""
         << "}\n";
 }
@@ -159,6 +208,8 @@ void JsonlFileSink::EmitEnriched(const EnrichedFinding& f) {
     auto img = JsonEscape(NarrowUtf8(f.evidence.proc.image));
     auto cmd = JsonEscape(NarrowUtf8(f.evidence.proc.command_line));
     auto summary = JsonEscape(NarrowUtf8(f.summary));
+    auto ecs = BuildEcsJson(f.evidence);
+    auto ocsf = BuildOcsfJson(f);
 
     ofs << "{"
         << "\"severity\":\"" << sev << "\","
@@ -168,6 +219,8 @@ void JsonlFileSink::EmitEnriched(const EnrichedFinding& f) {
         << "\"pid\":" << f.evidence.proc.pid << ","
         << "\"image\":\"" << img << "\","
         << "\"command_line\":\"" << cmd << "\","
+        << "\"ecs\":" << ecs << ","
+        << "\"ocsf\":" << ocsf << ","
         << "\"summary\":\"" << summary << "\","
         << "\"scans\":[";
 

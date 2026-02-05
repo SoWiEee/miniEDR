@@ -2,9 +2,13 @@ add_executable(miniedr
   src/main.cpp
   src/collectors/sysmon_collector.cpp
   src/collectors/driver_collector.cpp
+  src/control/central_config.cpp
+  src/control/central_http.cpp
+  src/control/central_manager.cpp
   src/response/apihook_responder.cpp
   src/hooking/apihook_injector.cpp
   src/collectors/api_hook_collector.cpp
+  src/collectors/etw_user_collector.cpp
   src/enrich/process_enricher.cpp
   src/driver/driver_policy.cpp
   src/driver/signer_trust.cpp
@@ -13,6 +17,7 @@ add_executable(miniedr
   src/detection/rule_engine.cpp
   src/detection/correlator.cpp
   src/output/alert_sinks.cpp
+  src/output/central_sink.cpp
   src/utils/win_path.cpp
   src/utils/encoding.cpp
   src/scanners/process_runner.cpp
@@ -23,6 +28,9 @@ add_executable(miniedr
   src/scanners/yara/yara_adapter.cpp
   src/response/response_manager.cpp
   src/response/process_responder.cpp
+  src/response/process_suspend_responder.cpp
+  src/response/file_quarantine_responder.cpp
+  src/response/tamper_protection_responder.cpp
 )
 
 find_package(nlohmann_json CONFIG REQUIRED)
@@ -34,7 +42,7 @@ find_library(DETOURS_LIBRARY detours REQUIRED)
 target_include_directories(miniedr PRIVATE src ../driver/include ${DETOURS_INCLUDE_DIRS} ${KRABSETW_INCLUDE_DIR})
 
 if (WIN32)
-  target_link_libraries(miniedr PRIVATE wevtapi advapi32 tdh xmllite crypt32 wintrust bcrypt ws2_32 nlohmann_json::nlohmann_json ${DETOURS_LIBRARY})
+  target_link_libraries(miniedr PRIVATE wevtapi advapi32 tdh xmllite crypt32 wintrust bcrypt ws2_32 winhttp nlohmann_json::nlohmann_json ${DETOURS_LIBRARY})
   target_compile_definitions(miniedr PRIVATE UNICODE _UNICODE)
 endif()
 

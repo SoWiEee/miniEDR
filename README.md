@@ -70,6 +70,12 @@ cmake --build build --config Release
 - Consumes the **NT Kernel Logger** in real time for:
     - Process events (ProcessGuid) → mapped to `ProcessCreate`
     - Image load events (ImageLoadGuid) → mapped to `ImageLoad`
+- Subscribes to user-mode ETW providers for script + AMSI + memory signals:
+    - `Microsoft-Windows-PowerShell` → `ScriptBlock`
+    - `Microsoft-Windows-Antimalware-Scan-Interface` → `AmsiScan`
+    - `Microsoft-Windows-Kernel-Memory` → `MemoryOperation`
+    - `Microsoft-Windows-Threat-Intelligence` → `ThreatIntel`
+    - `Microsoft-Windows-Kernel-Registry` → `RegistrySetValue`
 
 > ETW collector is optional and can be disabled via `--no-etw` flag.
 
@@ -136,15 +142,18 @@ Configuration:
   - Source, event id/opcode
   - Actor + Target process info (where available)
   - Up to a few event-specific fields
+  - ECS/OCSF-aligned metadata blocks for easier downstream integration
 
 ## 3. Rules
 
 - Default rules live here: `rules/default_rules.json`
 - The agent attempts to load rules in this order:
-    1. `<exe_dir>\rules\default_rules.json`
-    2. `.\rules\default_rules.json`
-    3. `.\default_rules.json`
-    4. Built-in fallback rules
+    1. `<exe_dir>\rules\remote_rules.json` (if delivered by central control)
+    2. `<exe_dir>\rules\default_rules.json`
+    3. `.\rules\remote_rules.json`
+    4. `.\rules\default_rules.json`
+    5. `.\default_rules.json`
+    6. Built-in fallback rules
 
 > You can edit the JSON rules without rebuilding.
 
@@ -163,13 +172,24 @@ Configuration:
 ## 5. Response
 
 A response manager scaffold is added (currently off by default) to keep the core detection path safe and predictable.
-Implemented example action:
+Implemented example actions:
 - terminate process for **Critical** alerts (when enabled)
+- suspend process (for High/Critical, when enabled)
+- quarantine file (for High/Critical, when enabled)
+- tamper protection: terminate/suspend the source when it targets protected processes
 
 Files:
 - `agent/src/response/*`
 
 > You can extend this with: suspend process, isolate host/network, quarantine file, block hash, etc.
+
+## 6. Centralized control (optional)
+
+- Event upload: alerts can be posted to a central service via HTTP.
+- Policy delivery: download policy JSON (`agent\config\policy.json`) to tune response behavior on startup.
+- Rule versioning: download rules with a `version` field and store to `rules\remote_rules.json` plus `rules\remote_rules.version`.
+
+Config: `agent/config/central_config.json`
 
 # Future Work & Integration Ideas
 
