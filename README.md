@@ -167,8 +167,11 @@ Configuration:
 ## 5. Response
 
 A response manager scaffold is added (currently off by default) to keep the core detection path safe and predictable.
-Implemented example action:
+Implemented example actions:
 - terminate process for **Critical** alerts (when enabled)
+- suspend process (for High/Critical, when enabled)
+- quarantine file (for High/Critical, when enabled)
+- tamper protection: terminate/suspend the source when it targets protected processes
 
 Files:
 - `agent/src/response/*`

@@ -24,6 +24,9 @@ add_executable(miniedr
   src/scanners/yara/yara_adapter.cpp
   src/response/response_manager.cpp
   src/response/process_responder.cpp
+  src/response/process_suspend_responder.cpp
+  src/response/file_quarantine_responder.cpp
+  src/response/tamper_protection_responder.cpp
 )
 
 find_package(nlohmann_json CONFIG REQUIRED)
