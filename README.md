@@ -140,6 +140,7 @@ Configuration:
   - Source, event id/opcode
   - Actor + Target process info (where available)
   - Up to a few event-specific fields
+  - ECS/OCSF-aligned metadata blocks for easier downstream integration
 
 ## 3. Rules
 
