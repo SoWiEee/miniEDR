@@ -1,5 +1,6 @@
 #include "collectors/sysmon_collector.h"
 #include "collectors/etw_kernel_collector.h"
+#include "collectors/etw_user_collector.h"
 #include "collectors/driver_collector.h"
 #include "collectors/api_hook_collector.h"
 
@@ -109,9 +110,14 @@ int wmain(int argc, wchar_t** argv) {
     }
 
     std::unique_ptr<EtwKernelCollector> etw;
+    std::unique_ptr<EtwUserCollector> etw_user;
     if (!no_etw) {
         etw = std::make_unique<EtwKernelCollector>();
         etw->Start([&](const CanonicalEvent& ev) {
+            HandleEvent(ev);
+        });
+        etw_user = std::make_unique<EtwUserCollector>();
+        etw_user->Start([&](const CanonicalEvent& ev) {
             HandleEvent(ev);
         });
     } else {
@@ -146,6 +152,7 @@ while (g_running) {
 
     if (apihook) apihook->Stop();
     if (sysmon) sysmon->Stop();
+    if (etw_user) etw_user->Stop();
     if (etw) etw->Stop();
 
     std::wcout << L"\nStopping.\n";

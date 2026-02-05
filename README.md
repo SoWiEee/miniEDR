@@ -70,6 +70,10 @@ cmake --build build --config Release
 - Consumes the **NT Kernel Logger** in real time for:
     - Process events (ProcessGuid) → mapped to `ProcessCreate`
     - Image load events (ImageLoadGuid) → mapped to `ImageLoad`
+- Subscribes to user-mode ETW providers for script + AMSI + memory signals:
+    - `Microsoft-Windows-PowerShell` → `ScriptBlock`
+    - `Microsoft-Windows-Antimalware-Scan-Interface` → `AmsiScan`
+    - `Microsoft-Windows-Kernel-Memory` → `MemoryOperation`
 
 > ETW collector is optional and can be disabled via `--no-etw` flag.
 

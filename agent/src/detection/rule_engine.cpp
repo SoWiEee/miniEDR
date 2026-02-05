@@ -34,6 +34,9 @@ static std::wstring EventTypeToString(EventType t) {
     case EventType::ImageLoad: return L"ImageLoad";
     case EventType::NetworkConnect: return L"NetworkConnect";
     case EventType::DnsQuery: return L"DnsQuery";
+    case EventType::ScriptBlock: return L"ScriptBlock";
+    case EventType::AmsiScan: return L"AmsiScan";
+    case EventType::MemoryOperation: return L"MemoryOperation";
     case EventType::FileCreate: return L"FileCreate";
     case EventType::FileDelete: return L"FileDelete";
     case EventType::RegistrySetValue: return L"RegistrySetValue";

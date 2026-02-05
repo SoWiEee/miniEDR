@@ -5,6 +5,7 @@ add_executable(miniedr
   src/response/apihook_responder.cpp
   src/hooking/apihook_injector.cpp
   src/collectors/api_hook_collector.cpp
+  src/collectors/etw_user_collector.cpp
   src/enrich/process_enricher.cpp
   src/driver/driver_policy.cpp
   src/driver/signer_trust.cpp

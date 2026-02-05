@@ -23,6 +23,13 @@ enum class EventType {
     NetworkConnect,       // Sysmon EID 3
     DnsQuery,             // Sysmon EID 22
 
+    // Script + scanning telemetry (ETW user providers)
+    ScriptBlock,          // PowerShell script block ETW
+    AmsiScan,             // AMSI scan ETW
+
+    // Memory-related telemetry (ETW)
+    MemoryOperation,
+
     // Filesystem
     FileCreate,           // Sysmon EID 11
     FileDelete,           // Sysmon EID 23/26 (depending on Sysmon version/config)
