@@ -30,6 +30,9 @@ enum class EventType {
     // Memory-related telemetry (ETW)
     MemoryOperation,
 
+    // Threat intelligence ETW
+    ThreatIntel,
+
     // Filesystem
     FileCreate,           // Sysmon EID 11
     FileDelete,           // Sysmon EID 23/26 (depending on Sysmon version/config)

@@ -74,6 +74,8 @@ cmake --build build --config Release
     - `Microsoft-Windows-PowerShell` → `ScriptBlock`
     - `Microsoft-Windows-Antimalware-Scan-Interface` → `AmsiScan`
     - `Microsoft-Windows-Kernel-Memory` → `MemoryOperation`
+    - `Microsoft-Windows-Threat-Intelligence` → `ThreatIntel`
+    - `Microsoft-Windows-Kernel-Registry` → `RegistrySetValue`
 
 > ETW collector is optional and can be disabled via `--no-etw` flag.
 

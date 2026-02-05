@@ -20,6 +20,8 @@ using json = nlohmann::json;
 constexpr const wchar_t* kPowerShellProvider = L"Microsoft-Windows-PowerShell";
 constexpr const wchar_t* kAmsiProvider = L"Microsoft-Windows-Antimalware-Scan-Interface";
 constexpr const wchar_t* kMemoryProvider = L"Microsoft-Windows-Kernel-Memory";
+constexpr const wchar_t* kThreatIntelProvider = L"Microsoft-Windows-Threat-Intelligence";
+constexpr const wchar_t* kKernelRegistryProvider = L"Microsoft-Windows-Kernel-Registry";
 
 std::wstring ToWString(const std::string& input) {
     return std::wstring(input.begin(), input.end());
@@ -193,9 +195,65 @@ void EtwUserCollector::Run() {
         cb_(ev);
     });
 
+    krabs::provider<> threat_provider(kThreatIntelProvider);
+    threat_provider.add_on_event_callback([this](const EVENT_RECORD& record, const krabs::trace_context& context) {
+        if (stop_requested_ || !cb_) return;
+
+        krabs::schema schema(record, context.schema_locator);
+        krabs::parser parser(schema);
+
+        CanonicalEvent ev;
+        ev.type = EventType::ThreatIntel;
+        ev.source = L"etw";
+        ev.source_eid = record.EventHeader.EventDescriptor.Id;
+
+        if (auto pid = TryParse<uint32_t>(parser, L"ProcessId")) {
+            ev.proc.pid = *pid;
+        }
+        if (auto desc = TryParse<std::wstring>(parser, L"Description")) {
+            ev.fields[L"Description"] = *desc;
+        }
+        if (auto name = TryParse<std::wstring>(parser, L"ThreatName")) {
+            ev.fields[L"ThreatName"] = *name;
+        }
+
+        EmitJsonPayload(ev, schema, record);
+
+        cb_(ev);
+    });
+
+    krabs::provider<> registry_provider(kKernelRegistryProvider);
+    registry_provider.add_on_event_callback([this](const EVENT_RECORD& record, const krabs::trace_context& context) {
+        if (stop_requested_ || !cb_) return;
+
+        krabs::schema schema(record, context.schema_locator);
+        krabs::parser parser(schema);
+
+        CanonicalEvent ev;
+        ev.type = EventType::RegistrySetValue;
+        ev.source = L"etw";
+        ev.source_eid = record.EventHeader.EventDescriptor.Id;
+
+        if (auto pid = TryParse<uint32_t>(parser, L"ProcessId")) {
+            ev.proc.pid = *pid;
+        }
+        if (auto key = TryParse<std::wstring>(parser, L"KeyName")) {
+            ev.fields[L"RegistryKey"] = *key;
+        }
+        if (auto value = TryParse<std::wstring>(parser, L"ValueName")) {
+            ev.fields[L"RegistryValueName"] = *value;
+        }
+
+        EmitJsonPayload(ev, schema, record);
+
+        cb_(ev);
+    });
+
     trace_->enable(powershell_provider);
     trace_->enable(amsi_provider);
     trace_->enable(memory_provider);
+    trace_->enable(threat_provider);
+    trace_->enable(registry_provider);
 
     trace_->start();
 }
