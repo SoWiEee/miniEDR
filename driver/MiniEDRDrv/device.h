@@ -6,7 +6,7 @@
 typedef struct _DEVICE_CONTEXT {
     WDFQUEUE Queue;
 
-    // event ring buffer (fixed-size entries)
+    // event ring buffer
     WDFSPINLOCK EventLock;
     ULONG WriteIndex;
     ULONG ReadIndex;
@@ -15,7 +15,7 @@ typedef struct _DEVICE_CONTEXT {
     // Policy knobs
     BOOLEAN HandleAuditEnabled;
 
-    // Phase 4+: enforcement
+    // Penforcement
     BOOLEAN EnforceProtect;
     BOOLEAN StripInsteadOfDeny;
     WDFSPINLOCK PolicyLock;
