@@ -2,7 +2,7 @@
 
 This folder contains a **KMDF** kernel driver project that emits telemetry events to user-mode via **IOCTL**.
 
-Implemented callbacks (audit-only in this milestone):
+Implemented callbacks:
 - `PsSetCreateProcessNotifyRoutineEx` (process create/exit)
 - `PsSetLoadImageNotifyRoutine` (image load)
 - `ObRegisterCallbacks` (audit process handle create/duplicate)
