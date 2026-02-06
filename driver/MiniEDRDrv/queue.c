@@ -23,7 +23,6 @@ ListContainsU32(_In_opt_ const UINT32* list, _In_ UINT32 count, _In_ UINT32 x)
 }
 
 // Ring is stored in the device context as an opaque buffer via WDFMEMORY in Phase 4+.
-// For this MVP we use a static nonpaged array per-driver instance.
 static MINIEDR_EVT_IMAGELOAD g_ring[RING_CAPACITY];
 
 // Producer: write a binary blob into next slot (truncates to SLOT_SIZE)
