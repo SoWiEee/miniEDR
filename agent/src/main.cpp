@@ -50,7 +50,7 @@ int wmain(int argc, wchar_t** argv) {
     const bool no_sysmon = HasArg(argc, argv, L"--no-sysmon");
     const bool no_etw = HasArg(argc, argv, L"--no-etw");
 
-    std::wcout << L"MiniEDR Phase 2 - Sysmon + ETW -> Normalize -> Rules + Correlation -> Alerts\n";
+    std::wcout << L"MiniEDR Launched!\n";
     std::wcout << L"Flags: --no-sysmon, --no-etw\n";
     std::wcout << L"Press Ctrl+C to stop.\n\n";
 
