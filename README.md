@@ -61,8 +61,8 @@ cmake --build build --config Release
     - EID 23/26 File delete
 
 > Sample Sysmon config is in `tools/sysmon/sysmonconfig.xml`.
-> - Install Sysmon: `sysmon64.exe -accepteula -i tools\sysmon\sysmonconfig.xml`
-> - Update config: `sysmon64.exe -c tools\sysmon\sysmonconfig.xml`
+> - Install Sysmon：`sysmon64.exe -accepteula -i tools\sysmon\sysmonconfig.xml`
+> - Update config：`sysmon64.exe -c tools\sysmon\sysmonconfig.xml`
 > This config is intentionally permissive for learning; expect noise. In real environments you should tune filters and add excludes.
 
 ### ETW collector (optional)
@@ -84,7 +84,7 @@ cmake --build build --config Release
 - On-demand injection only (triggered by high/critical alerts) to keep overhead low.
 - Hook DLL writes newline-delimited JSON to a named pipe (`\\.\pipe\MiniEDR.ApiHook`).
 - Agent receives events via `ApiHookCollector` and normalizes them into `EventType::ApiCall`.
-- Hooked APIs:
+- Hooked APIs：
     - `CreateRemoteThread`
     - `WriteProcessMemory`
     - `VirtualAllocEx`
@@ -100,9 +100,9 @@ Enable hooking:
 ### Kernel driver collector
 
 The driver registers callbacks:
-- Process create/exit: `PsSetCreateProcessNotifyRoutineEx`
-- Image load: `PsSetLoadImageNotifyRoutine`
-- Process handle audit: `ObRegisterCallbacks`
+- Process create/exit：`PsSetCreateProcessNotifyRoutineEx`
+- Image load：`PsSetLoadImageNotifyRoutine`
+- Process handle audit：`ObRegisterCallbacks`
 
 Kernel events are intentionally compact. After receiving a kernel event, the agent performs **best-effort enrichment**:
 - Full image path (`QueryFullProcessImageName`)
@@ -122,18 +122,18 @@ Upgrades enforcement from a static PID allowlist to a **signer-based dynamic all
 
 Configuration:
 - `agent/config/driver_policy.json`
-    - `enable_enforcement`: enable protect mode
-    - `strip_instead_of_deny`: prefer stripping rights over denying
+    - `enable_enforcement`：enable protect mode
+    - `strip_instead_of_deny`：prefer stripping rights over denying
 - `agent/config/signer_trust.json`
     - signer trust policy used to allowlist tools dynamically
 
 ## 2. Detection
 
 - Data-driven JSON ruleset (`rules/default_rules.json`)
-  - Simple condition model: `equals_any`, `contains_any`, `regex_any`
+  - Simple condition model：`equals_any`, `contains_any`, `regex_any`
   - Field paths like `proc.image`, `proc.command_line`, `target.image`, `fields.GrantedAccess`, `type`
 - Stateful correlation
-  - CORR-INJ-001: `ProcessAccess (high-rights)` followed by `CreateRemoteThread` within a short window
+  - CORR-INJ-001：`ProcessAccess (high-rights)` followed by `CreateRemoteThread` within a short window
 
 ### Output
 
@@ -160,8 +160,8 @@ Configuration:
 ## 4. Scanners (on-demand)
 
 - On-demand deep scans for already-alerted PIDs
-- Config: `agent\config\scanners.json`
-- Adapters for:
+- Config：`agent\config\scanners.json`
+- Adapters for：
     - PE-sieve (single PID scan)
     - HollowsHunter (PID + directory + unique ID scan)
     - YARA (PID scan via CLI), bring your own rules at `rules\yara\`
@@ -172,7 +172,7 @@ Configuration:
 ## 5. Response
 
 A response manager scaffold is added (currently off by default) to keep the core detection path safe and predictable.
-Implemented example actions:
+Implemented example actions：
 - terminate process for **Critical** alerts (when enabled)
 - suspend process (for High/Critical, when enabled)
 - quarantine file (for High/Critical, when enabled)
@@ -185,9 +185,9 @@ Files:
 
 ## 6. Centralized control (optional)
 
-- Event upload: alerts can be posted to a central service via HTTP.
-- Policy delivery: download policy JSON (`agent\config\policy.json`) to tune response behavior on startup.
-- Rule versioning: download rules with a `version` field and store to `rules\remote_rules.json` plus `rules\remote_rules.version`.
+- Event upload：alerts can be posted to a central service via HTTP.
+- Policy delivery：download policy JSON (`agent\config\policy.json`) to tune response behavior on startup.
+- Rule versioning：download rules with a `version` field and store to `rules\remote_rules.json` plus `rules\remote_rules.version`.
 
 Config: `agent/config/central_config.json`
 
@@ -204,5 +204,5 @@ Iintended design is “submit suspicious artifacts to an isolated analysis syste
 
 Will integrate [CAPE Sandbox](https://github.com/kevoreilly/CAPEv2)
 
-Common EDR pattern:
+Common EDR pattern：
 - Endpoint flags a file/process → uploads sample to sandbox → receives behavioral report → correlates with host telemetry to confirm severity.
